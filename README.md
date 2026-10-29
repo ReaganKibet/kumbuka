@@ -58,7 +58,7 @@ The free plan sleeps after 15 idle minutes, so the first request after a break t
 
 **3. Frontend: Netlify**
 1. Choose **Add new site**, then **Import an existing project**, and pick this repo. `netlify.toml` sets everything up.
-2. If your Render URL isn't `https://kumbuka-api.onrender.com`, edit **both** `VITE_API_URL` and the `connect-src` entry in `netlify.toml`, then push.
+2. If your Render URL isn't `https://kumbuka-api-skzu.onrender.com`, edit **both** `VITE_API_URL` and the `connect-src` entry in `netlify.toml`, then push.
 3. Put the Netlify URL into Render's `CORS_ORIGINS` (Render, then Environment). Render redeploys by itself.
 
 **4. First sign-in**
