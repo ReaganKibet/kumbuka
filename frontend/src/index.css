@@ -1,0 +1,71 @@
+@import "tailwindcss";
+
+@theme {
+  --color-mist: #eef1ef;      /* page */
+  --color-paper: #fbfcfb;     /* writing surfaces */
+  --color-ink: #1d2b2a;       /* text */
+  --color-muted: #5e6f6c;     /* secondary text */
+  --color-line: #d5dcd9;      /* borders */
+  --color-pine: #2f5d57;      /* actions */
+  --color-pine-deep: #234741;
+  --color-sage: #dfe8e4;      /* selected / soft fills */
+  --color-risk: #b4442e;      /* risk only */
+  --color-risk-soft: #f7e6e1;
+  --color-flag: #9a6514;      /* questionnaire flags, unsigned notes */
+  --color-flag-soft: #f6ecd9;
+
+  --font-sans: "Atkinson Hyperlegible", system-ui, sans-serif;
+  --font-serif: "Newsreader Variable", Georgia, serif;
+}
+
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0;
+  background: var(--color-mist);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  font-size: 15px;
+  line-height: 1.5;
+}
+
+:focus-visible { outline: 2px solid var(--color-pine); outline-offset: 2px; }
+
+/* Shared form controls */
+.field {
+  width: 100%;
+  background: var(--color-paper);
+  border: 1px solid var(--color-line);
+  border-radius: 6px;
+  padding: 0.5rem 0.65rem;
+  font: inherit;
+  color: inherit;
+}
+.field:focus { border-color: var(--color-pine); outline: none; box-shadow: 0 0 0 3px rgb(47 93 87 / 0.15); }
+textarea.field { resize: vertical; min-height: 4.5rem; }
+
+/* Note text reads like a notebook: serif, roomy */
+.note-text { font-family: var(--font-serif); font-size: 1.06rem; line-height: 1.65; }
+
+.btn {
+  display: inline-flex; align-items: center; gap: 0.4rem;
+  border-radius: 6px; padding: 0.45rem 0.9rem; font-weight: 700; font-size: 0.92rem;
+  border: 1px solid transparent; cursor: pointer; transition: background-color .15s;
+}
+.btn:disabled { opacity: .5; cursor: not-allowed; }
+.btn-primary { background: var(--color-pine); color: white; }
+.btn-primary:hover:not(:disabled) { background: var(--color-pine-deep); }
+.btn-quiet { background: transparent; color: var(--color-ink); border-color: var(--color-line); }
+.btn-quiet:hover:not(:disabled) { background: var(--color-sage); }
+.btn-danger { background: transparent; color: var(--color-risk); border-color: currentColor; }
+
+/* Printed notes and letters */
+@page { size: A4; margin: 18mm 16mm; }
+@media print {
+  html, body { background: white !important; font-size: 11pt; }
+  .note-text { font-size: 11.5pt; line-height: 1.55; }
+  a { color: inherit; text-decoration: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * { transition: none !important; animation: none !important; }
+}

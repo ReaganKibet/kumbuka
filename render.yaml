@@ -1,0 +1,32 @@
+# Render Blueprint for the Kumbuka API.
+# Render dashboard > New > Blueprint > pick this repo. You'll be asked for the values marked sync: false.
+services:
+  - type: web
+    name: kumbuka-api
+    runtime: python
+    rootDir: backend
+    region: frankfurt          # closest Render region to Nairobi
+    plan: free                 # free sleeps after 15 idle minutes; switch to a paid plan for daily use
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT --proxy-headers --forwarded-allow-ips="*"
+    healthCheckPath: /api/health
+    autoDeploy: true
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.13.5
+      - key: SECRET_KEY
+        generateValue: true
+      - key: DATABASE_URL        # Supabase > Connect > Session pooler URI (port 5432)
+        sync: false
+      - key: CORS_ORIGINS        # your Netlify site, e.g. https://kumbuka.netlify.app
+        sync: false
+      - key: ANTHROPIC_API_KEY   # optional; leave empty to run without AI
+        sync: false
+      - key: ANTHROPIC_MODEL
+        value: claude-sonnet-5-5
+      - key: APP_TIMEZONE
+        value: Africa/Nairobi
+      - key: ALLOW_REGISTRATION  # "first" = only the first account can sign up
+        value: first
+      - key: IDLE_LOCK_MINUTES
+        value: "15"
