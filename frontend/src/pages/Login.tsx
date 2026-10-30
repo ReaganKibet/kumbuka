@@ -5,7 +5,7 @@ import { useAuth } from "../auth";
 import { ErrorText, Field } from "../components/ui";
 
 export default function Login() {
-  const { me, signIn, config } = useAuth();
+  const { me, signIn } = useAuth();
   const nav = useNavigate();
   const [params] = useSearchParams();
   const [mode, setMode] = useState<"login" | "register">("login");
@@ -17,15 +17,33 @@ export default function Login() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [waking, setWaking] = useState(false);
+  const [next, setNext] = useState("/");
+  // null = still asking the server (it may be waking up), "offline" = couldn't reach it
+  const [registration, setRegistration] = useState<boolean | null | "offline">(null);
 
-  // A free server sleeps when idle; warm it up while the counselor types.
+  // A free server sleeps when idle. Wake it while the counselor types, and find out
+  // whether this site still needs its first account. Retries cover a slow wake-up.
   useEffect(() => {
+    let cancelled = false;
     const slow = window.setTimeout(() => setWaking(true), 2500);
-    api.health().catch(() => {}).finally(() => { window.clearTimeout(slow); setWaking(false); });
-    return () => window.clearTimeout(slow);
+    (async () => {
+      for (let attempt = 0; attempt < 4 && !cancelled; attempt++) {
+        try {
+          const c = await api.authConfig();
+          if (!cancelled) setRegistration(c.registration_open);
+          break;
+        } catch {
+          if (attempt === 3 && !cancelled) setRegistration("offline");
+          else await new Promise((r) => setTimeout(r, 5000));
+        }
+      }
+      window.clearTimeout(slow);
+      if (!cancelled) setWaking(false);
+    })();
+    return () => { cancelled = true; window.clearTimeout(slow); };
   }, []);
 
-  if (me) return <Navigate to="/" replace />;
+  if (me) return <Navigate to={next} replace />;
 
   const notice = params.get("locked")
     ? "Kumbuka locked after a period of inactivity. Sign in to carry on."
@@ -42,8 +60,8 @@ export default function Login() {
         nav("/");
       } else if (mode === "register") {
         const r = await api.register({ name, email, password });
+        setNext("/settings?welcome=1");
         signIn(r.token, r.therapist);
-        nav("/settings?welcome=1");
       } else {
         const r = await api.login({ email, password });
         if (r.mfa_required && r.mfa_token) { setMfaToken(r.mfa_token); setPassword(""); }
@@ -57,7 +75,7 @@ export default function Login() {
     }
   }
 
-  const canRegister = config?.registration_open;
+  const canRegister = registration === true;
   const heading = mfaToken ? "Enter your code" : mode === "login" ? "Sign in" : "Create your account";
 
   return (
@@ -115,13 +133,31 @@ export default function Login() {
           <button className="mt-6 text-sm text-muted underline underline-offset-2 hover:text-ink" onClick={() => { setMfaToken(null); setCode(""); setError(null); }}>
             Start again
           </button>
-        ) : (canRegister || mode === "register") && (
-          <button
-            className="mt-6 text-sm text-muted underline underline-offset-2 hover:text-ink"
-            onClick={() => { setMode(mode === "login" ? "register" : "login"); setError(null); }}
-          >
-            {mode === "login" ? "Setting up for the first time? Create the account" : "Already have an account? Sign in"}
+        ) : mode === "register" ? (
+          <button className="mt-6 text-sm text-muted underline underline-offset-2 hover:text-ink" onClick={() => { setMode("login"); setError(null); }}>
+            Already have an account? Sign in
           </button>
+        ) : (
+          <div className="mt-6 border-t border-line pt-5 text-sm">
+            {registration === null && <p className="text-muted">Checking whether this site is set up…</p>}
+            {canRegister && (
+              <>
+                <p className="text-muted">No account exists here yet.</p>
+                <button className="btn btn-quiet mt-2 w-full justify-center" onClick={() => { setMode("register"); setError(null); }}>
+                  Set up the practice account
+                </button>
+              </>
+            )}
+            {registration === false && (
+              <p className="text-muted">
+                This practice is already set up, so new sign-ups are closed. Sign in with the account's email and password,
+                or ask the practice owner for access.
+              </p>
+            )}
+            {registration === "offline" && (
+              <p className="text-muted">Can't reach the server right now. Check your connection and reload the page.</p>
+            )}
+          </div>
         )}
       </section>
     </div>
