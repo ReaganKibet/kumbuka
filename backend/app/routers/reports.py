@@ -198,6 +198,70 @@ def build_report(db: Session, me: Therapist, start: date, end: date, programme_i
     today = local_now().date()
     by_service = Counter(SERVICE_LABELS.get(r.service, r.service) for r in refs)
 
+    # IASC Common M&E Framework for MHPSS: the same figures, in the indicators UN agencies report against
+    def person_group(c: Client) -> str:
+        a = _age(c.date_of_birth, end)
+        if c.gender not in ("female", "male") or a is None:
+            return "other_or_unknown"
+        return {("female", True): "girls", ("male", True): "boys", ("female", False): "women",
+                ("male", False): "men"}[(c.gender, a < 18)]
+
+    groups_of_people = Counter(person_group(clients[i]) for i in served)
+    focused = {k: small(groups_of_people.get(k, 0)) for k in ("women", "men", "girls", "boys", "other_or_unknown")}
+    staff_ids = {s.therapist_id for s in attended} | {g.facilitator_id for g in groups}
+    staff = db.scalars(select(Therapist).where(Therapist.id.in_(staff_ids))).all() if staff_ids else []
+    supervised = {s.therapist_id for s in attended if s.reviewed_by_id and s.review_status in ("approved", "returned")}
+    with_supervisor = [t for t in staff if t.supervisor_id]
+    setting_labels = {"facility": "Facility or centre", "home_visit": "Home visit", "outreach": "Community outreach",
+                      "school": "School", "phone": "Phone", "online": "Online", None: "Not recorded"}
+    by_setting = Counter(setting_labels.get(s.setting, s.setting) for s in attended)
+    by_language = Counter((s.language or "").strip().title() or "Not recorded" for s in attended)
+    interpreted = sum(1 for s in attended if s.interpreter_used)
+    oc = {o["measure"]: o for o in outcomes}
+
+    def outcome_value(kind: str) -> tuple[str, str]:
+        o = oc.get(kind)
+        if not o or not o["with_follow_up"]:
+            return "No follow-up scores yet", ""
+        return (f"{o['improved_pct']:g}% improved ({o['improved']} of {o['with_follow_up']})",
+                o["definition"])
+
+    phq_v, phq_n = outcome_value("PHQ-9")
+    gad_v, gad_n = outcome_value("GAD-7")
+    who_v, who_n = outcome_value("WHO-5")
+    iasc_rows = [
+        {"code": "O5.4", "indicator": "People receiving focused psychosocial or psychological care",
+         "value": f"{small(len(served))} ({focused['women']} women, {focused['men']} men, {focused['girls']} girls, "
+                  f"{focused['boys']} boys, {focused['other_or_unknown']} other or not recorded)",
+         "note": f"{small(len(served_ind))} one-to-one, {small(len(served_grp))} in groups (some both). "
+                 "Girls and boys are under 18 at the end of the period."},
+        {"code": "Gi.3", "indicator": "Symptoms of depression (PHQ-9)", "value": phq_v, "note": phq_n},
+        {"code": "Gi.3", "indicator": "Symptoms of anxiety (GAD-7)", "value": gad_v, "note": gad_n},
+        {"code": "Gi.2", "indicator": "Subjective wellbeing (WHO-5)", "value": who_v, "note": who_n},
+        {"code": "Gi.1", "indicator": "Functioning", "value": "Not measured",
+         "note": "Add a functioning measure such as WHO's WHODAS 2.0 to report this."},
+        {"code": "O5.2", "indicator": "Counselling staff receiving supervision",
+         "value": f"{_pct(len(supervised), len(staff)) if staff else 0:g}% ({len(supervised)} of {len(staff)})",
+         "note": f"Staff with at least one note co-signed or returned by a supervisor in the period. "
+                 f"{len(with_supervisor)} of {len(staff)} have a named supervisor."},
+        {"code": "O5.3", "indicator": "Referrals made and completed",
+         "value": f"{len(refs)} made, {completed} completed"
+                  + (f" ({_pct(completed, len(resolved)):g}% of those resolved)" if resolved else ""),
+         "note": "Completed = the person attended the service they were referred to."},
+        {"code": "O5.8", "indicator": "Satisfaction of people receiving care", "value": "Not measured",
+         "note": "Planned: a short satisfaction question at the last session."},
+    ]
+    iasc = {
+        "framework": "IASC Common Monitoring and Evaluation Framework for MHPSS in Emergency Settings (v2.0)",
+        "focused_care": focused | {"total": small(len(served))},
+        "supervision": {"delivering_staff": len(staff), "with_supervisor": len(with_supervisor),
+                        "supervised_in_period": len(supervised), "pct": _pct(len(supervised), len(staff))},
+        "by_setting": [{"label": k, "count": v} for k, v in by_setting.most_common()],
+        "by_language": [{"label": k, "count": v} for k, v in by_language.most_common(8)],
+        "interpreter_sessions": interpreted,
+        "indicators": iasc_rows,
+    }
+
     return {
         "organization": org.name,
         "programme": programmes[programme_id].name if programme_id in programmes else "All programmes",
@@ -242,6 +306,7 @@ def build_report(db: Session, me: Therapist, start: date, end: date, programme_i
             "awaiting_review": awaiting_review,
             "unsigned": unsigned,
         },
+        "iasc": iasc,
     }
 
 
@@ -339,6 +404,10 @@ def report_csv(
         for k in ("screened_in_period", "with_follow_up", "improved", "improved_pct", "deteriorated",
                   "clinical_at_baseline", "recovered", "recovered_pct", "mean_baseline", "mean_latest"):
             w.writerow([f"Outcomes {o['measure']}", k.replace("_", " "), "" if o[k] is None else o[k]])
+    for row in d["iasc"]["indicators"]:
+        w.writerow([f"IASC MHPSS {row['code']}", row["indicator"], row["value"]])
+    for row in d["iasc"]["by_setting"]:
+        w.writerow(["Sessions by setting", row["label"], row["count"]])
     audit(db, me, "export_report", "organization", me.organization_id, f"{start}..{end}")
     db.commit()
     name = f"kumbuka-report-{start}-to-{end}.csv"

@@ -152,6 +152,9 @@ def update_client(
             _validate_assignment(db, me, changes["therapist_id"], None)
     if changes.get("programme_id") is not None:
         _validate_assignment(db, me, None, changes["programme_id"])
+    for flag in ("interpreter_needed", "consent_signed", "consent_ai", "guardian_consent", "restricted"):
+        if flag in changes and changes[flag] is None:
+            changes.pop(flag)
     for k, v in changes.items():
         setattr(client, k, v)
     audit(db, me, "update", "client", client.id, ", ".join(sorted(changes))[:255])

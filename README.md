@@ -37,6 +37,15 @@ Organisations that deliver counselling or psychosocial support at scale, often t
 - **Restricted cases** (GBV, abuse, staff-related) can be opened only by the counsellor and their supervisor.
 - **WhatsApp/SMS check-in links:** clients answer questionnaires on their phone. The organisation's own crisis lines are shown afterwards, with Kenyan defaults.
 
+**Field work and humanitarian programmes**
+- **Offline field kit** (`/field`): before going somewhere without signal, a counsellor downloads their own active clients and groups.
+  - The kit is encrypted on the phone with a PIN (AES-GCM, PBKDF2), wiped after ten wrong PINs, and expires after 72 hours.
+  - Offline, they can look people up, record sessions, questionnaires and group attendance, and register new people.
+  - Work uploads automatically when the connection returns. Each record carries a device-made ID, so retries never duplicate anything.
+  - Uploaded notes arrive as drafts to read and sign.
+  - The app itself loads offline through a service worker, which never caches client data.
+- **Field identifiers:** UNHCR proGres and Primero case numbers, camp or settlement and block, preferred language and interpreter needs. Sessions record where they took place, the language used and whether an interpreter was present.
+
 **Groups and referrals**
 - **Group sessions** (school wellbeing circles, support groups) with an attendance register. New members can be registered on the spot.
 - **Referrals** to medical, psychiatric, legal, child protection, GBV, education or economic services. Each referral gets an automatic follow-up date based on urgency and an outcome, and overdue follow-ups are highlighted.
@@ -50,6 +59,7 @@ Organisations that deliver counselling or psychosocial support at scale, often t
   - Average scores at first and latest assessment.
 - **Referral completion**, **safeguarding** counts and **record quality** (notes signed within 48 hours, notes awaiting review).
 - Every figure is calculated from structured data, never by AI. Any group of 1–4 people shows as "<5", and exports are always suppressed this way.
+- **UN and humanitarian indicators:** the same figures mapped to the IASC Common M&E Framework for MHPSS: O5.4 focused care by women, men, girls and boys; Gi.3 symptoms; Gi.2 wellbeing; O5.2 supervision; O5.3 referrals. Includes where sessions took place and in which languages, and appears in the CSV too.
 - **Narrative for your funder:** an optional AI first draft of the write-up, made from the anonymised figures only.
 
 **Security:** two-step sign-in and recovery codes, lockout and rate limiting, auto-lock after inactivity, sign out everywhere, per-organisation activity log (admins see everyone's actions), security headers and CSP.

@@ -27,7 +27,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     api.authConfig().then(setConfig).catch(() => {});
     if (!getToken()) { setReady(true); return; }
-    api.me().then(setMe).catch(() => setToken(null)).finally(() => setReady(true));
+    // A network failure isn't a sign-out: keep the token so field work can upload later.
+    api.me().then(setMe).catch((e) => { if ((e as { status?: number }).status !== 0) setToken(null); }).finally(() => setReady(true));
   }, []);
 
   const signOut = useCallback((reason: "locked" | "manual" | "demo" = "manual") => {

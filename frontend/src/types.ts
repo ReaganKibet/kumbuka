@@ -69,6 +69,15 @@ export type Report = {
   safeguarding: { high_risk_active: Count; medium_risk_active: Count; phq9_item9_flags: Count; escalations_raised: Count };
   referrals: { made: number; by_service: Breakdown; completed: number; completion_rate_pct: number | null; open: number; overdue_follow_up: number };
   documentation: { notes_signed: number; signed_within_48h_pct: number | null; awaiting_review: number; unsigned: number };
+  iasc: {
+    framework: string;
+    focused_care: Record<"women" | "men" | "girls" | "boys" | "other_or_unknown" | "total", Count>;
+    supervision: { delivering_staff: number; with_supervisor: number; supervised_in_period: number; pct: number | null };
+    by_setting: { label: string; count: number }[];
+    by_language: { label: string; count: number }[];
+    interpreter_sessions: number;
+    indicators: { code: string; indicator: string; value: string; note: string }[];
+  };
 };
 
 export type SupervisionData = {
@@ -106,6 +115,12 @@ export type Client = {
   guardian_phone: string | null;
   guardian_consent: boolean;
   restricted: boolean;
+  unhcr_case_no: string | null;
+  primero_case_id: string | null;
+  settlement: string | null;
+  block: string | null;
+  preferred_language: string | null;
+  interpreter_needed: boolean;
   therapist_id: number;
   counsellor_name: string | null;
   programme_name: string | null;
@@ -140,6 +155,9 @@ export type Session = {
   duration_min: number;
   status: "scheduled" | "attended" | "cancelled" | "no_show";
   mood_rating: number | null;
+  setting: "facility" | "home_visit" | "outreach" | "school" | "phone" | "online" | null;
+  language: string | null;
+  interpreter_used: boolean;
   dictation: string | null;
   data: string | null;
   assessment: string | null;

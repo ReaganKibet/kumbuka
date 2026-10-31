@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import { api } from "../api";
 import { useAuth } from "../auth";
 import { GENDERS, ROLES } from "../lib/africa";
+import LanguageList from "./LanguageList";
 import { isSupervisor } from "../lib/roles";
 import type { Client, Member, Programme } from "../types";
 import { ErrorText, Field } from "./ui";
@@ -48,7 +49,15 @@ export default function ClientForm({ initial = {}, submitLabel, onSubmit, full }
     guardian_phone: initial.guardian_phone ?? "",
     guardian_consent: initial.guardian_consent ?? false,
     restricted: initial.restricted ?? false,
+    unhcr_case_no: initial.unhcr_case_no ?? "",
+    primero_case_id: initial.primero_case_id ?? "",
+    settlement: initial.settlement ?? "",
+    block: initial.block ?? "",
+    preferred_language: initial.preferred_language ?? "",
+    interpreter_needed: initial.interpreter_needed ?? false,
   });
+  const hasField = !!(initial.unhcr_case_no || initial.primero_case_id || initial.settlement || initial.block
+    || initial.preferred_language || initial.interpreter_needed);
   const { me } = useAuth();
   const [programmes, setProgrammes] = useState<Programme[]>([]);
   const [team, setTeam] = useState<Member[]>([]);
@@ -92,6 +101,11 @@ export default function ClientForm({ initial = {}, submitLabel, onSubmit, full }
         referral_source: empty(v.referral_source),
         guardian_name: empty(v.guardian_name),
         guardian_phone: empty(v.guardian_phone),
+        unhcr_case_no: empty(v.unhcr_case_no),
+        primero_case_id: empty(v.primero_case_id),
+        settlement: empty(v.settlement),
+        block: empty(v.block),
+        preferred_language: empty(v.preferred_language),
       } as Partial<Client>);
       setSaved(true);
     } catch (err) {
@@ -142,6 +156,25 @@ export default function ClientForm({ initial = {}, submitLabel, onSubmit, full }
           </Field>
         )}
       </fieldset>
+
+      <details className="rounded-lg border border-line px-4 py-3" open={hasField}>
+        <summary className="cursor-pointer font-bold">Field and humanitarian details <span className="font-normal text-muted">(optional)</span></summary>
+        <p className="mt-1 text-sm text-muted">Links this record to agency systems such as UNHCR's proGres or Primero, without replacing them. Don't record legal or immigration status here.</p>
+        <div className="mt-3 grid gap-4 sm:grid-cols-2">
+          <Field label="UNHCR case or individual number"><input className="field" {...text("unhcr_case_no")} /></Field>
+          <Field label="Primero / CPIMS+ case ID"><input className="field" {...text("primero_case_id")} /></Field>
+          <Field label="Camp, settlement or village"><input className="field" {...text("settlement")} /></Field>
+          <Field label="Block, zone or section"><input className="field" {...text("block")} /></Field>
+          <Field label="Preferred language" hint="e.g. Kiswahili, Somali, Arabic, Kinyarwanda">
+            <input className="field" list="kumbuka-languages" {...text("preferred_language")} />
+          </Field>
+          <label className="flex items-center gap-2.5 self-end pb-2">
+            <input type="checkbox" className="size-4 accent-pine" checked={v.interpreter_needed} onChange={(e) => set("interpreter_needed", e.target.checked)} />
+            <span>Needs an interpreter</span>
+          </label>
+        </div>
+        <LanguageList />
+      </details>
 
       {minor && (
         <fieldset className="space-y-3 rounded-lg border border-flag/40 bg-flag-soft/40 p-4">

@@ -8,7 +8,7 @@ from fastapi.staticfiles import StaticFiles
 
 from .config import settings
 from .db import run_migrations
-from .routers import auth, care, checkins, clients, dashboard, letters, measures, org, reports, sessions
+from .routers import auth, care, checkins, clients, dashboard, field, letters, measures, org, reports, sessions
 
 
 @asynccontextmanager
@@ -36,7 +36,7 @@ app.add_middleware(
 )
 
 for r in (auth.router, clients.router, sessions.router, measures.router, dashboard.router, checkins.router,
-          letters.router, org.router, care.router, reports.router):
+          letters.router, org.router, care.router, reports.router, field.router):
     app.include_router(r, prefix="/api")
 
 

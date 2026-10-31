@@ -223,6 +223,10 @@ def seed_demo(db: Session) -> Organization:  # noqa: C901 (a long but linear scr
     db.add(AuditLog(organization_id=org.id, therapist_id=staff["lay"].id, action="escalate", entity="client",
                     entity_id=lay_client.id, at=lay_client.escalated_at))
 
+    extra = random.Random(2026)
+    for c, prog_key in clients:
+        c.preferred_language = "Kiswahili" if prog_key == "schools" else extra.choice(["Dholuo", "Kiswahili", "English"])
+
     # Individual sessions over the last ~4 months, with improving questionnaire scores for most people
     review_left = 3
     for c, prog_key in clients:
@@ -240,6 +244,10 @@ def seed_demo(db: Session) -> Organization:  # noqa: C901 (a long but linear scr
                 break
             st = "no_show" if rng.random() < 0.08 else "attended"
             s = CounselingSession(therapist_id=c.therapist_id, client_id=c.id, scheduled_at=when, duration_min=50, status=st)
+            # A separate random stream, so adding these details doesn't change the demo's other figures
+            s.setting = "school" if prog_key == "schools" else extra.choice(["facility", "home_visit", "outreach", "outreach"])
+            s.language = extra.choice(["Kiswahili", "English", "Sheng", "Kiswahili"] if prog_key == "schools"
+                                      else ["Dholuo", "Kiswahili", "Kiswahili", "English"])
             if st == "attended":
                 progress = k / max(1, n_sessions - 1)
                 s.mood_rating = max(1, min(10, 3 + round(progress * 4 if improving else rng.randint(-1, 1)) + rng.randint(0, 1)))

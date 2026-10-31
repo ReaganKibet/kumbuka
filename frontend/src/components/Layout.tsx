@@ -12,6 +12,7 @@ export default function Layout() {
     { to: "/clients", label: "Clients", show: isClinical(me) },
     { to: "/groups", label: "Groups", show: isClinical(me) },
     { to: "/referrals", label: "Referrals", show: isClinical(me) },
+    { to: "/field", label: "Field kit", show: isClinical(me) },
     { to: "/supervision", label: "Supervision", show: isSupervisor(me) },
     { to: "/reports", label: "Reports", show: canReport(me) },
     { to: "/team", label: "Team", show: isAdmin(me) },

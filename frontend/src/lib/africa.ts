@@ -61,3 +61,14 @@ export const REFERRAL_STATUS: Record<string, string> = {
 };
 
 export const GENDERS: Record<string, string> = { female: "Female", male: "Male", other: "Other", undisclosed: "Prefer not to say" };
+
+/** Common session languages in East African programmes (free text is allowed too). */
+export const LANGUAGES = [
+  "English", "Kiswahili", "Sheng", "Somali", "Arabic", "French", "Kinyarwanda", "Kirundi", "Amharic", "Oromo",
+  "Tigrinya", "Nuer", "Dinka", "Luganda", "Turkana", "Kikuyu", "Dholuo", "Luhya", "Kalenjin", "Kamba",
+];
+
+export const SETTINGS: Record<string, string> = {
+  facility: "Facility or centre", home_visit: "Home visit", outreach: "Community outreach", school: "School",
+  phone: "Phone", online: "Online",
+};

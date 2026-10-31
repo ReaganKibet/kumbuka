@@ -12,6 +12,7 @@ RiskLevel = Literal["none", "low", "medium", "high"]
 Gender = Literal["female", "male", "other", "undisclosed"]
 ClientStatus = Literal["active", "paused", "closed"]
 SessionStatus = Literal["scheduled", "attended", "cancelled", "no_show"]
+SessionSetting = Literal["facility", "home_visit", "outreach", "school", "phone", "online"]
 GoalStatus = Literal["active", "achieved", "dropped"]
 
 
@@ -157,6 +158,12 @@ class ClientBase(BaseModel):
     guardian_phone: str | None = None
     guardian_consent: bool = False
     restricted: bool = False
+    unhcr_case_no: str | None = Field(default=None, max_length=40)
+    primero_case_id: str | None = Field(default=None, max_length=60)
+    settlement: str | None = Field(default=None, max_length=120)
+    block: str | None = Field(default=None, max_length=60)
+    preferred_language: str | None = Field(default=None, max_length=40)
+    interpreter_needed: bool = False
 
 
 class ClientCreate(ClientBase):
@@ -187,6 +194,12 @@ class ClientUpdate(BaseModel):
     guardian_consent: bool | None = None
     restricted: bool | None = None
     therapist_id: int | None = None
+    unhcr_case_no: str | None = Field(default=None, max_length=40)
+    primero_case_id: str | None = Field(default=None, max_length=60)
+    settlement: str | None = Field(default=None, max_length=120)
+    block: str | None = Field(default=None, max_length=60)
+    preferred_language: str | None = Field(default=None, max_length=40)
+    interpreter_needed: bool | None = None
 
 
 class ClientOut(ClientBase, ORM):
@@ -230,6 +243,9 @@ class SessionUpdate(BaseModel):
     scheduled_at: datetime | None = None
     duration_min: int | None = Field(default=None, ge=5, le=480)
     status: SessionStatus | None = None
+    setting: SessionSetting | None = None
+    language: str | None = Field(default=None, max_length=40)
+    interpreter_used: bool | None = None
     mood_rating: int | None = Field(default=None, ge=1, le=10)
     dictation: str | None = None
     data: str | None = None
@@ -257,6 +273,9 @@ class SessionOut(ORM):
     scheduled_at: datetime
     duration_min: int
     status: str
+    setting: str | None = None
+    language: str | None = None
+    interpreter_used: bool = False
     mood_rating: int | None
     dictation: str | None
     data: str | None

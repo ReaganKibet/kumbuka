@@ -96,6 +96,14 @@ class Client(Base):
     guardian_consent: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
     restricted: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")  # only counsellor + their supervisor
 
+    # Humanitarian / field programmes: links to agency systems without replacing them
+    unhcr_case_no: Mapped[str | None] = mapped_column(String(40))  # UNHCR proGres individual or case number
+    primero_case_id: Mapped[str | None] = mapped_column(String(60))  # Primero / CPIMS+ case ID
+    settlement: Mapped[str | None] = mapped_column(String(120))  # camp, settlement or village
+    block: Mapped[str | None] = mapped_column(String(60))  # block, zone or section
+    preferred_language: Mapped[str | None] = mapped_column(String(40))
+    interpreter_needed: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+
     # Lay counsellor asks for clinical support
     escalated_at: Mapped[datetime | None] = mapped_column(DateTime)
     escalation_note: Mapped[str | None] = mapped_column(Text)
@@ -138,6 +146,9 @@ class CounselingSession(Base):
     duration_min: Mapped[int] = mapped_column(Integer, default=50)
     status: Mapped[str] = mapped_column(String(20), default="scheduled")  # scheduled | attended | cancelled | no_show
 
+    setting: Mapped[str | None] = mapped_column(String(20))  # facility | home_visit | outreach | school | phone | online
+    language: Mapped[str | None] = mapped_column(String(40))  # language the session was held in
+    interpreter_used: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
     mood_rating: Mapped[int | None] = mapped_column(Integer)  # client self-rating 1-10
     dictation: Mapped[str | None] = mapped_column(Text)  # raw dictation / rough notes
     data: Mapped[str | None] = mapped_column(Text)  # D: what the client reported + what was observed
@@ -324,3 +335,16 @@ class AuditLog(Base):
     entity_id: Mapped[int | None] = mapped_column(Integer)
     detail: Mapped[str | None] = mapped_column(String(255))
     at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, index=True)
+
+
+class FieldSync(Base):
+    """Offline field records already received, so a retried upload never creates duplicates."""
+
+    __tablename__ = "field_sync"
+
+    offline_id: Mapped[str] = mapped_column(String(36), primary_key=True)  # UUID made on the device
+    organization_id: Mapped[int | None] = mapped_column(ForeignKey("organizations.id"), index=True)
+    therapist_id: Mapped[int] = mapped_column(ForeignKey("therapists.id"), index=True)
+    kind: Mapped[str] = mapped_column(String(20))  # client | session | assessment | attendance
+    object_id: Mapped[int | None] = mapped_column(Integer)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)

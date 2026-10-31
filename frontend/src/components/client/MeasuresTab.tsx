@@ -5,7 +5,10 @@ import CheckinPanel from "./CheckinPanel";
 import { ErrorText, Field, fmtDate, Loading, Modal, toLocalInput } from "../ui";
 import ScoreChart from "./ScoreChart";
 
-function MeasureForm({ clientId, measure, onDone }: { clientId: number; measure: Measure; onDone: (a: Assessment) => void }) {
+/** One questionnaire. `save` stores the answers (online, or into the offline field kit). */
+export function MeasureForm({ measure, save, submitLabel = "Save score" }: {
+  measure: Measure; save: (answers: number[], when: string) => Promise<void>; submitLabel?: string;
+}) {
   const [answers, setAnswers] = useState<(number | null)[]>(() => measure.items.map(() => null));
   const [when, setWhen] = useState(() => toLocalInput(new Date()));
   const [error, setError] = useState<string | null>(null);
@@ -18,7 +21,7 @@ function MeasureForm({ clientId, measure, onDone }: { clientId: number; measure:
     if (!done) { setError("Answer every question first."); return; }
     setBusy(true);
     try {
-      onDone(await api.addAssessment(clientId, { kind: measure.kind, answers: answers as number[], taken_at: when }));
+      await save(answers as number[], when);
     } catch (err) { setError((err as Error).message); setBusy(false); }
   }
 
@@ -56,7 +59,7 @@ function MeasureForm({ clientId, measure, onDone }: { clientId: number; measure:
       <ErrorText error={error} />
       <div className="sticky bottom-0 -mx-5 flex items-center justify-between border-t border-line bg-paper px-5 py-3">
         <span className="text-sm">Total <span className="font-serif text-2xl tabular-nums">{total}</span><span className="text-muted"> / {measure.max}</span></span>
-        <button className="btn btn-primary" disabled={busy || !done}>Save score</button>
+        <button className="btn btn-primary" disabled={busy || !done}>{submitLabel}</button>
       </div>
     </form>
   );
@@ -148,9 +151,9 @@ export default function MeasuresTab({ client }: { client: Client }) {
       <Modal open={!!open} onClose={() => setOpen(null)} title={open?.title ?? ""}>
         {open && (
           <MeasureForm
-            clientId={clientId}
             measure={open}
-            onDone={(a) => {
+            save={async (answers, when) => {
+              const a = await api.addAssessment(clientId, { kind: open.kind, answers, taken_at: when });
               setRows((r) => [...(r ?? []), a].sort((x, y) => x.taken_at.localeCompare(y.taken_at)));
               setJustSaved(a);
               setOpen(null);

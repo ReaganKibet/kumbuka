@@ -106,6 +106,8 @@ def update_session(
             msg = ("This note is waiting for supervisor review." if s.note_status == "submitted"
                    else "This note is signed. Add an addendum instead of editing it.")
             raise HTTPException(status.HTTP_409_CONFLICT, msg)
+    if "interpreter_used" in changes and changes["interpreter_used"] is None:
+        changes.pop("interpreter_used")
     if "scheduled_at" in changes and changes["scheduled_at"] is not None:
         changes["scheduled_at"] = changes["scheduled_at"].replace(tzinfo=None)
     for k, v in changes.items():

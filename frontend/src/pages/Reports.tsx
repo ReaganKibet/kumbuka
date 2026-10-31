@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import { api } from "../api";
 import { useAuth } from "../auth";
 import { ErrorText, Loading } from "../components/ui";
@@ -288,6 +288,50 @@ export default function Reports() {
                 <dt>Missed appointments (no-show rate)</dt><dd className="tabular-nums font-bold">{pct(r.reach.no_show_rate_pct)}</dd>
               </dl>
             </div>
+          </section>
+
+          <section className="mt-12 break-inside-avoid">
+            <h2 className="font-serif text-2xl">UN and humanitarian indicators</h2>
+            <p className="mt-1 max-w-3xl text-sm text-muted">
+              The same figures, mapped to the {r.iasc.framework}, which UNHCR, UNICEF and their partners report against.
+            </p>
+            <div className="mt-4 overflow-x-auto rounded-xl bg-paper ring-1 ring-line">
+              <table className="w-full min-w-[40rem] text-sm">
+                <thead className="text-left text-muted">
+                  <tr className="border-b border-line">
+                    <th className="px-4 py-2 font-bold">Code</th><th className="py-2 pr-4 font-bold">Indicator</th>
+                    <th className="py-2 pr-4 font-bold">Value</th><th className="py-2 pr-4 font-bold">How it's counted</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-line">
+                  {r.iasc.indicators.map((row, i) => (
+                    <tr key={i} className="align-top">
+                      <td className="px-4 py-2.5 font-mono text-xs font-bold">{row.code}</td>
+                      <td className="py-2.5 pr-4">{row.indicator}</td>
+                      <td className={`py-2.5 pr-4 font-bold ${row.value === "Not measured" ? "font-normal text-muted" : ""}`}>{row.value}</td>
+                      <td className="py-2.5 pr-4 text-xs text-muted">{row.note}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            {r.iasc.by_setting.length > 0 && (
+              <div className="mt-6 grid gap-8 md:grid-cols-2">
+                <div>
+                  <h3 className="font-bold">Where one-to-one sessions took place</h3>
+                  <dl className="mt-2 grid grid-cols-[1fr_auto] gap-y-1.5 text-sm">
+                    {r.iasc.by_setting.map((x) => <Fragment key={x.label}><dt>{x.label}</dt><dd className="tabular-nums font-bold">{x.count}</dd></Fragment>)}
+                  </dl>
+                </div>
+                <div>
+                  <h3 className="font-bold">Session languages</h3>
+                  <dl className="mt-2 grid grid-cols-[1fr_auto] gap-y-1.5 text-sm">
+                    {r.iasc.by_language.map((x) => <Fragment key={x.label}><dt>{x.label}</dt><dd className="tabular-nums font-bold">{x.count}</dd></Fragment>)}
+                    <dt className="text-muted">Sessions with an interpreter</dt><dd className="tabular-nums font-bold">{r.iasc.interpreter_sessions}</dd>
+                  </dl>
+                </div>
+              </div>
+            )}
           </section>
 
           <p className="mt-12 border-t border-line pt-4 text-xs text-muted">

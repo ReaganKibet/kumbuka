@@ -5,6 +5,8 @@ import { LOCK_EVENT, useAuth } from "../auth";
 import { isSupervisor } from "../lib/roles";
 import { useDictation } from "../components/useDictation";
 import SessionRecorder from "../components/SessionRecorder";
+import LanguageList from "../components/LanguageList";
+import { SETTINGS } from "../lib/africa";
 import { ErrorText, Field, fmtDate, Loading, Modal, StatusTag } from "../components/ui";
 import type { Client, Draft, Session } from "../types";
 
@@ -17,13 +19,16 @@ const SECTIONS = [
   { key: "risk_check", label: "Risk check", hint: "Self-harm, harm to others, safeguarding. Note it even when denied." },
 ] as const;
 type NoteKey = (typeof SECTIONS)[number]["key"];
-type Form = Record<NoteKey | "dictation" | "private_note", string> & { mood_rating: number | null; status: Session["status"] };
+type Form = Record<NoteKey | "dictation" | "private_note" | "setting" | "language", string> & {
+  mood_rating: number | null; status: Session["status"]; interpreter_used: boolean;
+};
 
 function toForm(s: Session): Form {
   return {
     dictation: s.dictation ?? "", data: s.data ?? "", assessment: s.assessment ?? "", plan: s.plan ?? "",
     interventions: s.interventions ?? "", homework: s.homework ?? "", risk_check: s.risk_check ?? "",
     private_note: s.private_note ?? "", mood_rating: s.mood_rating, status: s.status,
+    setting: s.setting ?? "", language: s.language ?? "", interpreter_used: s.interpreter_used,
   };
 }
 
@@ -97,6 +102,8 @@ export default function SessionNote() {
         ? { private_note: form.private_note || null }
         : {
             status: form.status, mood_rating: form.mood_rating, dictation: form.dictation || null,
+            setting: (form.setting || null) as Session["setting"], language: form.language.trim() || null,
+            interpreter_used: form.interpreter_used,
             data: form.data || null, assessment: form.assessment || null, plan: form.plan || null,
             interventions: form.interventions || null, homework: form.homework || null,
             risk_check: form.risk_check || null, private_note: form.private_note || null,
@@ -339,6 +346,23 @@ export default function SessionNote() {
                   ))}
                 </div>
               </Field>
+              <Field label="Where">
+                <select className="field" value={form.setting} onChange={(e) => set({ setting: e.target.value })}>
+                  <option value="">Not recorded</option>
+                  {Object.entries(SETTINGS).map(([k, l]) => <option key={k} value={k}>{l}</option>)}
+                </select>
+              </Field>
+              <Field label="Language">
+                <div className="flex items-center gap-3">
+                  <input className="field" list="kumbuka-languages" value={form.language} placeholder={client?.preferred_language ?? "e.g. Kiswahili"}
+                    onChange={(e) => set({ language: e.target.value })} />
+                  <label className="flex shrink-0 items-center gap-1.5 text-sm">
+                    <input type="checkbox" className="size-4 accent-pine" checked={form.interpreter_used} onChange={(e) => set({ interpreter_used: e.target.checked })} />
+                    Interpreter
+                  </label>
+                </div>
+              </Field>
+              <LanguageList />
             </div>
 
             <div className="mt-6 space-y-5">

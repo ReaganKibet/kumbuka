@@ -1,5 +1,6 @@
 """Organizations, roles, supervision, referrals, groups, reports and the demo."""
 
+import uuid
 from datetime import date, timedelta
 
 import pytest
@@ -7,13 +8,8 @@ import pytest
 from app.config import settings
 from helpers import PASSWORD
 
-_n = 0
-
-
 def _uniq(prefix):
-    global _n
-    _n += 1
-    return f"{prefix}{_n}@org.test.ke".replace(".test.", ".example.")
+    return f"{prefix}{uuid.uuid4().hex[:12]}@org.example.ke"
 
 
 def make_org(api, kind="ngo"):

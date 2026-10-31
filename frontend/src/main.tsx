@@ -25,11 +25,14 @@ import Supervision from "./pages/Supervision";
 import Referrals from "./pages/Referrals";
 import Reports from "./pages/Reports";
 import { GroupDetail, GroupsList } from "./pages/Groups";
+import FieldPage from "./pages/Field";
 
 function Protected({ children }: { children: ReactNode }) {
   const { me, ready } = useAuth();
   if (!ready) return <Loading />;
   // Visitors to the home page see the landing page; deep links go to sign-in.
+  // Offline with no session: the field kit is the part of Kumbuka that works without a connection.
+  if (!me && !navigator.onLine) return <Navigate to="/field" replace />;
   if (!me) return <Navigate to={window.location.pathname === "/" ? "/welcome" : "/login"} replace />;
   return <>{children}</>;
 }
@@ -39,6 +42,7 @@ const router = createBrowserRouter([
   { path: "/join/:token", element: <Join /> },
   { path: "/login", element: <Login /> },
   { path: "/checkin/:token", element: <CheckIn /> },
+  { path: "/field", element: <FieldPage /> },
   { path: "/print/session/:id", element: <Protected><PrintSession /></Protected> },
   { path: "/print/client/:id", element: <Protected><PrintClient /></Protected> },
   { path: "/print/letter/:id", element: <Protected><PrintLetter /></Protected> },
@@ -62,6 +66,10 @@ const router = createBrowserRouter([
   },
   { path: "*", element: <Navigate to="/" replace /> },
 ]);
+
+if ("serviceWorker" in navigator && import.meta.env.PROD) {
+  window.addEventListener("load", () => { navigator.serviceWorker.register("/sw.js").catch(() => {}); });
+}
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
