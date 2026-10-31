@@ -149,7 +149,7 @@ export default function Today() {
           </dl>
           {!d.ai_enabled && (
             <p className="mt-6 text-xs text-muted">
-              AI drafting is off. Add an ANTHROPIC_API_KEY on the server to turn it on; everything else works without it.
+              AI drafting and transcription are off for your organisation. Everything else works without them.
             </p>
           )}
         </section>

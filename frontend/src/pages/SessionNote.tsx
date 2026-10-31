@@ -4,6 +4,7 @@ import { api } from "../api";
 import { LOCK_EVENT, useAuth } from "../auth";
 import { isSupervisor } from "../lib/roles";
 import { useDictation } from "../components/useDictation";
+import SessionRecorder from "../components/SessionRecorder";
 import { ErrorText, Field, fmtDate, Loading, Modal, StatusTag } from "../components/ui";
 import type { Client, Draft, Session } from "../types";
 
@@ -275,6 +276,23 @@ export default function SessionNote() {
             <p className="mt-2 text-xs text-muted">
               Dictation uses your browser's speech service. Drafting sends only these notes, never the client's name.
             </p>
+
+            {me?.can_transcribe && client?.consent_ai && (
+              <SessionRecorder
+                sessionId={id}
+                isDemo={!!me.organization?.is_demo}
+                onTranscript={(text, mode) => {
+                  const heading = mode === "session" ? "Session transcript" : "Voice note";
+                  setForm((f) => {
+                    if (!f) return f;
+                    setDirty(true);
+                    const block = `[${heading}]\n${text.trim()}`;
+                    return { ...f, dictation: f.dictation.trim() ? `${f.dictation.trimEnd()}\n\n${block}` : block };
+                  });
+                  window.setTimeout(() => dictRef.current?.scrollIntoView({ behavior: "smooth", block: "center" }), 50);
+                }}
+              />
+            )}
 
             {draftInfo && (
               <div className="mt-4 space-y-2">

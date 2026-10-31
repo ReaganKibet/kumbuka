@@ -3,9 +3,9 @@ from sqlalchemy import and_, case, func, select
 from sqlalchemy.orm import Session, aliased
 
 from ..ai import write_brief
-from ..config import local_now
+from ..config import local_now, settings
 from ..db import get_db
-from ..models import CLINICAL_ROLES, Assessment, CheckinLink, Client, CounselingSession, Goal, Letter, Programme, Therapist, utcnow
+from ..models import CLINICAL_ROLES, Assessment, CheckinLink, Client, CounselingSession, Goal, Letter, Organization, Programme, Therapist, utcnow
 from ..schemas import (
     AssessmentOut,
     BriefOut,
@@ -266,8 +266,10 @@ def client_brief(
                     f"Client's own check-in on {checkin.completed_at:%Y-%m-%d}: mood {checkin.mood or '-'}/10. "
                     f"Message from client: {checkin.message or '-'}"
                 )
-            summary, message = write_brief("\n\n".join(parts))
-            audit(db, me, "ai_brief", "client", client.id)
+            org = db.get(Organization, me.organization_id) if me.organization_id else None
+            summary, message = write_brief("\n\n".join(parts), allowed=settings.ai_allowed_for(org))
+            if summary:
+                audit(db, me, "ai_brief", "client", client.id)
 
     audit(db, me, "view_brief", "client", client.id)
     db.commit()

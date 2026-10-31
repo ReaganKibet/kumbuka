@@ -89,8 +89,53 @@ function OutcomeCard({ o }: { o: Outcome }) {
 
 const show = (c: Count) => c;
 
+function Narrative({ start, end, programmeId }: { start: string; end: string; programmeId: number | "" }) {
+  const [text, setText] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+  useEffect(() => { setText(""); setError(null); }, [start, end, programmeId]);
+
+  async function write() {
+    setBusy(true); setError(null);
+    try { setText((await api.reportNarrative({ start, end, programme_id: programmeId })).narrative); }
+    catch (e) { setError((e as Error).message); }
+    finally { setBusy(false); }
+  }
+
+  return (
+    <section className={`mt-8 rounded-xl bg-paper p-5 ring-1 ring-line ${text ? "" : "print:hidden"}`}>
+      <div className="flex flex-wrap items-baseline justify-between gap-3 print:hidden">
+        <div>
+          <h2 className="font-serif text-2xl">Narrative for your funder</h2>
+          <p className="mt-1 max-w-2xl text-sm text-muted">
+            A first draft of the write-up for a grant or board report, using only the anonymised figures on this page.
+            No names or case notes are sent. Check every sentence before you use it.
+          </p>
+        </div>
+        <div className="flex gap-2">
+          {text && (
+            <button className="btn btn-quiet" onClick={async () => { await navigator.clipboard.writeText(text); setCopied(true); setTimeout(() => setCopied(false), 2000); }}>
+              {copied ? "Copied" : "Copy"}
+            </button>
+          )}
+          <button className="btn btn-primary" onClick={write} disabled={busy}>{busy ? "Writing…" : text ? "Write again" : "Draft the narrative"}</button>
+        </div>
+      </div>
+      {error && <p role="alert" className="mt-3 text-sm text-risk">{error}</p>}
+      {text && (
+        <>
+          <textarea rows={11} className="field note-text mt-4 print:hidden" value={text} onChange={(e) => setText(e.target.value)} aria-label="Narrative" />
+          <div className="hidden whitespace-pre-wrap leading-relaxed print:block">{text}</div>
+          <p className="mt-2 text-xs text-muted print:hidden">AI-drafted from the figures below. Edit freely; it's included when you print.</p>
+        </>
+      )}
+    </section>
+  );
+}
+
 export default function Reports() {
-  const { me } = useAuth();
+  const { me, config } = useAuth();
   const [preset, setPreset] = useState("90");
   const [start, setStart] = useState(iso(new Date(Date.now() - 89 * 864e5)));
   const [end, setEnd] = useState(iso(new Date()));
@@ -167,6 +212,8 @@ export default function Reports() {
           <p className="mt-6 text-sm text-muted">
             {r.organization}, {r.programme}. {longDate(r.period.start)} to {longDate(r.period.end)}. Prepared by {me?.name}.
           </p>
+
+          {config?.ai_enabled && <Narrative start={start} end={end} programmeId={programmeId} />}
 
           <section className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <Tile value={r.reach.clients_served} label="People reached" sub={`${r.reach.new_clients} new in this period`} />

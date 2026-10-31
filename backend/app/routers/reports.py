@@ -10,7 +10,8 @@ from collections import Counter, defaultdict
 from datetime import date, datetime, time, timedelta
 from zoneinfo import ZoneInfo
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from starlette.concurrency import run_in_threadpool
 from fastapi.responses import StreamingResponse
 from sqlalchemy import false, select
 from sqlalchemy.orm import Session
@@ -30,7 +31,9 @@ from ..models import (
     Referral,
     Therapist,
 )
-from ..security import audit, reports_access
+from ..ai import AIError, report_narrative
+from ..schemas import NarrativeOut
+from ..security import audit, client_ip, demo_ai_limiter, reports_access
 
 router = APIRouter(tags=["reports"])
 S = CounselingSession
@@ -266,6 +269,40 @@ def report(
     audit(db, me, "view_report", "organization", me.organization_id, f"{start}..{end}")
     db.commit()
     return data
+
+
+@router.post("/reports/narrative", response_model=NarrativeOut)
+async def narrative(
+    request: Request,
+    start: date | None = None,
+    end: date | None = None,
+    programme_id: int | None = None,
+    db: Session = Depends(get_db),
+    me: Therapist = Depends(reports_access),
+):
+    """AI-written funder narrative from the anonymised, suppressed figures only.
+
+    No client records are sent: only the counts and percentages a funder would see, without the
+    organisation's or funders' names. That is why this works even on a free AI key.
+    """
+    if not settings.ai_enabled:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "AI is not set up on this server.")
+    start, end = _params(start, end)
+    d = build_report(db, me, start, end, programme_id, suppress=True)
+    org = db.get(Organization, me.organization_id) if me.organization_id else None
+    if org is not None and org.is_demo:
+        if demo_ai_limiter.blocked(client_ip(request)):
+            raise HTTPException(status.HTTP_429_TOO_MANY_REQUESTS, "The demo's AI allowance for your network is used up. Try again in an hour.")
+        demo_ai_limiter.hit(client_ip(request))
+    figures = {k: v for k, v in d.items() if k not in ("organization", "generated_at")}
+    figures["by_programme"] = [{k: v for k, v in row.items() if k != "funder"} for row in d["by_programme"]]
+    try:
+        text = await run_in_threadpool(report_narrative, figures)
+    except AIError as exc:
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, str(exc))
+    audit(db, me, "ai_narrative", "organization", me.organization_id, f"{start}..{end}")
+    db.commit()
+    return NarrativeOut(narrative=text)
 
 
 @router.get("/reports.csv")

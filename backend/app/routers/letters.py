@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 from ..ai import draft_letter
 from ..config import settings
 from ..db import get_db
-from ..models import CounselingSession, Goal, Letter, Therapist
+from ..models import CounselingSession, Goal, Letter, Organization, Therapist
 from ..schemas import AuditEventIn, LetterDraftIn, LetterDraftOut, LetterIn, LetterOut, LetterUpdate
 from ..security import audit, current_therapist, owned_client
 
@@ -60,8 +60,11 @@ def draft(client_id: int, body: LetterDraftIn, db: Session = Depends(get_db), me
         subject = f"Referral: {name}"
         ai_text, message = None, None
         if body.use_ai:
+            org = db.get(Organization, me.organization_id) if me.organization_id else None
             if not settings.ai_enabled:
                 message = "AI is off, so this is the standard template."
+            elif not settings.ai_allowed_for(org):
+                message = "AI is limited to the demo organisation on this server's free AI plan, so this is the standard template."
             elif not client.consent_ai:
                 message = "This client hasn't consented to AI-assisted notes, so this is the standard template."
             else:

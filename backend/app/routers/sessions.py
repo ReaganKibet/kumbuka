@@ -1,12 +1,17 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from starlette.concurrency import run_in_threadpool
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
-from ..ai import draft_note
+from ..ai import AIError, MAX_AUDIO_BYTES, can_transcribe, draft_note, transcribe
+from ..config import settings
 from ..db import get_db
 from ..models import Addendum, Client, CounselingSession, Organization, Therapist, utcnow
-from ..schemas import AddendumIn, DraftIn, DraftOut, ReviewIn, SessionCreate, SessionOut, SessionUpdate
-from ..security import audit, can_supervise, client_scope, clinical_only, current_therapist, is_admin, owned_client
+from ..schemas import AddendumIn, DraftIn, DraftOut, ReviewIn, SessionCreate, SessionOut, SessionUpdate, TranscriptOut
+from ..security import (
+    audit, can_supervise, client_ip, client_scope, clinical_only, current_therapist, demo_ai_limiter, demo_audio_limiter,
+    is_admin, owned_client,
+)
 
 router = APIRouter(tags=["sessions"])
 
@@ -190,7 +195,8 @@ def add_addendum(
 
 @router.post("/sessions/{session_id}/ai-draft", response_model=DraftOut)
 def ai_draft(
-    session_id: int, body: DraftIn, db: Session = Depends(get_db), me: Therapist = Depends(current_therapist)
+    session_id: int, body: DraftIn, request: Request, db: Session = Depends(get_db),
+    me: Therapist = Depends(current_therapist),
 ):
     """Returns a draft only. Nothing is saved until the counsellor reviews it and saves the note."""
     s = owned_session(db, session_id, me)
@@ -202,7 +208,57 @@ def ai_draft(
             status.HTTP_403_FORBIDDEN,
             "This client has not consented to AI-assisted notes. Record their consent on the Profile tab first.",
         )
-    result = draft_note(body.dictation)
+    org = db.get(Organization, me.organization_id) if me.organization_id else None
+    allowed = settings.ai_allowed_for(org)
+    if allowed and org is not None and org.is_demo:
+        if demo_ai_limiter.blocked(client_ip(request)):
+            raise HTTPException(status.HTTP_429_TOO_MANY_REQUESTS, "The demo's AI allowance for your network is used up. Try again in an hour.")
+        demo_ai_limiter.hit(client_ip(request))
+    result = draft_note(body.dictation, allowed=allowed)
     audit(db, me, "ai_draft", "session", s.id, "ai" if result["ai_used"] else "fallback")
     db.commit()
     return result
+
+
+@router.post("/sessions/{session_id}/transcribe", response_model=TranscriptOut)
+async def transcribe_audio(
+    session_id: int,
+    request: Request,
+    mode: str = Query(default="dictation", pattern="^(dictation|session)$"),
+    recording_consent: bool = Query(default=False),
+    seconds: int | None = Query(default=None, ge=0, le=6 * 3600),
+    db: Session = Depends(get_db),
+    me: Therapist = Depends(current_therapist),
+):
+    """Transcribe a voice note or a session recording sent as the raw request body.
+
+    The audio is held in memory for this request only. It is never written to disk or the database.
+    """
+    s = owned_session(db, session_id, me)
+    authored(s, me)
+    if s.note_status != "draft":
+        raise HTTPException(status.HTTP_409_CONFLICT, "This note is already signed or submitted.")
+    if not s.client.consent_ai:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "This client has not consented to AI-assisted notes. Record their consent on the Profile tab first.")
+    if mode == "session" and not recording_consent:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Confirm that the client agreed to this session being recorded.")
+    org = db.get(Organization, me.organization_id) if me.organization_id else None
+    if not settings.ai_allowed_for(org) or not can_transcribe():
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Transcription isn't available for your organisation on this server.")
+    if org is not None and org.is_demo:
+        if demo_audio_limiter.blocked(client_ip(request)):
+            raise HTTPException(status.HTTP_429_TOO_MANY_REQUESTS, "The demo's transcription allowance for your network is used up. Try again in an hour.")
+        demo_audio_limiter.hit(client_ip(request))
+    if int(request.headers.get("content-length") or 0) > MAX_AUDIO_BYTES:
+        raise HTTPException(status.HTTP_413_CONTENT_TOO_LARGE, "The recording is too large (over 18 MB).")
+    audio = await request.body()
+    try:
+        text = await run_in_threadpool(transcribe, audio, request.headers.get("content-type", ""))
+    except AIError as exc:
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, str(exc))
+    finally:
+        del audio
+    detail = f"{mode}, {seconds or '?'}s" + (", client agreed to recording" if mode == "session" else "")
+    audit(db, me, "transcribe", "session", s.id, detail)
+    db.commit()
+    return TranscriptOut(transcript=text, seconds=seconds)

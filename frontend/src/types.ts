@@ -13,9 +13,13 @@ export type Therapist = {
   organization: Org | null;
   title: string | null; practice_name: string | null; phone: string | null; address: string | null; license_no: string | null;
   totp_enabled: boolean; recovery_codes_left: number;
+  ai_available: boolean; can_transcribe: boolean;
 };
 
-export type AuthConfig = { registration_open: boolean; idle_lock_minutes: number; ai_enabled: boolean; demo_enabled: boolean };
+export type AuthConfig = {
+  registration_open: boolean; idle_lock_minutes: number; ai_enabled: boolean; demo_enabled: boolean;
+  ai_provider: "gemini" | "anthropic" | null; ai_real_data: boolean;
+};
 
 export type Programme = { id: number; name: string; location: string | null; funder: string | null; active: boolean };
 

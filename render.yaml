@@ -20,7 +20,13 @@ services:
         sync: false
       - key: CORS_ORIGINS        # your Netlify site, e.g. https://kumbuka.netlify.app
         sync: false
-      - key: ANTHROPIC_API_KEY   # optional; leave empty to run without AI
+      - key: GEMINI_API_KEY      # optional; free key from aistudio.google.com/apikey
+        sync: false
+      - key: GEMINI_MODEL
+        value: gemini-3.5-flash-lite
+      - key: GEMINI_BILLING_ENABLED  # "true" only once billing is on for the key; then AI may see real client records
+        value: "false"
+      - key: ANTHROPIC_API_KEY   # optional alternative to Gemini (no transcription)
         sync: false
       - key: ANTHROPIC_MODEL
         value: claude-sonnet-5-5

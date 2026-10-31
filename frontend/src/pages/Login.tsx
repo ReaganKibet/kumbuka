@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import { Link, Navigate, useNavigate, useSearchParams } from "react-router-dom";
 import { api } from "../api";
 import { useAuth } from "../auth";
+import { Photo } from "../lib/photos";
 import { ErrorText, Field } from "../components/ui";
 import { COUNTRIES, ORG_KINDS } from "../lib/africa";
 import type { OrgKind } from "../types";
@@ -85,7 +86,11 @@ export default function Login() {
 
   return (
     <div className="grid min-h-screen md:grid-cols-[1fr_28rem]">
-      <section className="hidden flex-col justify-end bg-pine p-12 text-mist md:flex">
+      <section className="relative isolate hidden flex-col justify-end overflow-hidden bg-pine p-12 text-mist md:flex">
+        <div aria-hidden className="absolute inset-0 -z-10">
+          <Photo k="group" sizes="60vw" eager />
+        </div>
+        <div aria-hidden className="absolute inset-0 -z-10 bg-gradient-to-t from-pine-deep via-pine-deep/75 to-pine-deep/10" />
         <Link to="/welcome" className="font-serif text-6xl leading-none tracking-tight">kumbuka</Link>
         <p className="mt-4 max-w-md font-serif text-xl leading-relaxed text-mist/85">
           Counselling records, supervision and impact reporting for Africa's schools, NGOs and counselling centres.

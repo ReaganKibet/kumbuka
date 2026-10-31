@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session, selectinload
 
 from ..config import local_now, settings
 from ..db import get_db
-from ..models import Assessment, AuditLog, CheckinLink, Client, CounselingSession, Therapist
+from ..models import Assessment, AuditLog, CheckinLink, Client, CounselingSession, Organization, Therapist
 from ..schemas import AuditOut, DashboardOut, SessionOut, SessionWithClient
 from ..security import client_scope, current_therapist, is_admin, team_ids
 
@@ -127,7 +127,7 @@ def dashboard(db: Session = Depends(get_db), me: Therapist = Depends(current_the
         attention=attention,
         checkins=checkins,
         counts=counts,
-        ai_enabled=settings.ai_enabled,
+        ai_enabled=settings.ai_allowed_for(db.get(Organization, me.organization_id) if me.organization_id else None),
         supervision=supervision,
     )
 

@@ -3,6 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from ..ai import can_transcribe
 from ..config import settings
 from ..db import get_db
 from ..models import Organization, Therapist
@@ -51,7 +52,10 @@ def therapist_out(t: Therapist, db: Session | None = None) -> TherapistOut:
     out = TherapistOut.model_validate(t)
     out.recovery_codes_left = len(t.recovery_codes or []) if t.totp_enabled else 0
     if db is not None and t.organization_id:
-        out.organization = OrgOut.model_validate(db.get(Organization, t.organization_id))
+        org = db.get(Organization, t.organization_id)
+        out.organization = OrgOut.model_validate(org)
+        out.ai_available = settings.ai_allowed_for(org)
+        out.can_transcribe = out.ai_available and can_transcribe()
     return out
 
 
@@ -83,6 +87,8 @@ def auth_config(db: Session = Depends(get_db)):
         idle_lock_minutes=settings.idle_lock_minutes,
         ai_enabled=settings.ai_enabled,
         demo_enabled=settings.demo_enabled,
+        ai_provider=settings.ai_provider,
+        ai_real_data=settings.ai_real_data,
     )
 
 

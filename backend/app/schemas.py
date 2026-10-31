@@ -72,6 +72,8 @@ class TherapistOut(ORM):
     license_no: str | None = None
     totp_enabled: bool = False
     recovery_codes_left: int = 0
+    ai_available: bool = False  # AI may be used on this person's client records
+    can_transcribe: bool = False
 
 
 class ProfileUpdate(BaseModel):
@@ -123,6 +125,8 @@ class AuthConfigOut(BaseModel):
     idle_lock_minutes: int
     ai_enabled: bool
     demo_enabled: bool = False
+    ai_provider: str | None = None
+    ai_real_data: bool = False  # False on a free Gemini key: AI only in the demo and on anonymised reports
 
 
 class DemoLoginIn(BaseModel):
@@ -287,7 +291,16 @@ class SessionWithClient(SessionOut):
 
 
 class DraftIn(BaseModel):
-    dictation: str = Field(min_length=10, max_length=20000)
+    dictation: str = Field(min_length=10, max_length=60000)  # a full-session transcript can be long
+
+
+class TranscriptOut(BaseModel):
+    transcript: str
+    seconds: int | None = None
+
+
+class NarrativeOut(BaseModel):
+    narrative: str
 
 
 class DraftOut(BaseModel):

@@ -13,7 +13,7 @@ export const LETTER_KINDS: Record<LetterKind, { label: string; help: string }> =
 
 export default function LettersTab({ client }: { client: Client }) {
   const nav = useNavigate();
-  const { config } = useAuth();
+  const { me } = useAuth();
   const [rows, setRows] = useState<Letter[] | null>(null);
   const [open, setOpen] = useState(false);
   const [kind, setKind] = useState<LetterKind>("attendance");
@@ -25,7 +25,7 @@ export default function LettersTab({ client }: { client: Client }) {
 
   useEffect(() => { api.letters(client.id).then(setRows).catch((e) => setError(e.message)); }, [client.id]);
 
-  const aiPossible = kind === "referral" && !!config?.ai_enabled && client.consent_ai;
+  const aiPossible = kind === "referral" && !!me?.ai_available && client.consent_ai;
 
   async function create(e: FormEvent) {
     e.preventDefault();
@@ -91,7 +91,7 @@ export default function LettersTab({ client }: { client: Client }) {
                 <span>Draft the summary from signed notes with AI <span className="block text-sm text-muted">The client's name is never sent; you review everything before printing.</span></span>
               </label>
             ) : (
-              <p className="text-xs text-muted">{!config?.ai_enabled ? "AI is off, so you'll start from a template." : "This client hasn't consented to AI, so you'll start from a template."}</p>
+              <p className="text-xs text-muted">{!me?.ai_available ? "AI isn't available for your organisation, so you'll start from a template." : "This client hasn't consented to AI, so you'll start from a template."}</p>
             )
           )}
           <button className="btn btn-primary" disabled={busy}>{busy ? "Preparing draft…" : "Start the letter"}</button>

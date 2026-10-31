@@ -177,6 +177,9 @@ class RateLimiter:
 
 login_ip_limiter = RateLimiter(limit=20, window_seconds=15 * 60)
 public_ip_limiter = RateLimiter(limit=30, window_seconds=10 * 60)
+# AI calls from the public demo spend the server's (possibly free) AI quota, so cap them per network.
+demo_ai_limiter = RateLimiter(limit=40, window_seconds=60 * 60)
+demo_audio_limiter = RateLimiter(limit=8, window_seconds=60 * 60)
 
 
 def client_ip(request: Request) -> str:

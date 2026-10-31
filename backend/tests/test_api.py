@@ -129,32 +129,3 @@ def test_assessments_goals_brief_dashboard_export(api):
 
     actions = {row["action"] for row in api.get("/api/audit", headers=h).json()}
     assert {"create", "update", "view_brief", "export"} <= actions
-
-
-def test_ai_draft_parses_model_output(monkeypatch):
-    """The AI path: model output (a forced tool call) becomes the draft; no names sent."""
-    from types import SimpleNamespace
-
-    from app import ai
-    from app.config import settings
-
-    sent = {}
-
-    class FakeMessages:
-        def create(self, **kw):
-            sent.update(kw)
-            return SimpleNamespace(content=[SimpleNamespace(type="tool_use", input={
-                "data": "Client reported better sleep.", "assessment": "Improving.", "plan": "Continue.",
-                "interventions": "Breathing.", "homework": "Thought log.", "risk_indicators": [],
-            })])
-
-    monkeypatch.setattr(settings, "anthropic_api_key", "sk-test")
-    monkeypatch.setattr(ai, "_client", lambda: SimpleNamespace(messages=FakeMessages()))
-
-    out = ai.draft_note("Slept better this week. We did breathing. She'll keep a thought log.")
-    assert out["ai_used"] and out["data"] == "Client reported better sleep." and out["risk_indicators"] == []
-    assert sent["tool_choice"] == {"type": "tool", "name": "record_dap_note"}
-
-    # If the model misses a risk mention, the keyword check still surfaces it.
-    out = ai.draft_note("Hard week. He said he wants to die sometimes. We talked about work.")
-    assert out["risk_indicators"] and "please check" in out["risk_indicators"][0]

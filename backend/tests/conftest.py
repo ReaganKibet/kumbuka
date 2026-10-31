@@ -8,6 +8,9 @@ else:
     _db = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
     os.environ["DATABASE_URL"] = f"sqlite:///{_db.name}"
 os.environ["ANTHROPIC_API_KEY"] = ""
+os.environ["GEMINI_API_KEY"] = ""
+os.environ["GEMINI_BILLING_ENABLED"] = "false"
+os.environ.pop("AI_PROVIDER", None)
 os.environ["SECRET_KEY"] = "test-secret-key-that-is-long-enough-for-hs256"
 os.environ["ALLOW_REGISTRATION"] = "true"
 os.environ.pop("RENDER", None)
@@ -18,7 +21,7 @@ from sqlalchemy import text  # noqa: E402
 
 from app.db import engine  # noqa: E402
 from app.main import app  # noqa: E402
-from app.security import login_ip_limiter, public_ip_limiter  # noqa: E402
+from app.security import demo_ai_limiter, demo_audio_limiter, login_ip_limiter, public_ip_limiter  # noqa: E402
 
 
 @pytest.fixture(scope="session")
@@ -34,3 +37,5 @@ def api():
 def _reset_limiters():
     login_ip_limiter.reset()
     public_ip_limiter.reset()
+    demo_ai_limiter.reset()
+    demo_audio_limiter.reset()

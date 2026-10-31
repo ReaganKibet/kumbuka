@@ -15,6 +15,8 @@ const Ctx = createContext<AuthState | null>(null);
 
 /** Pages with unsaved work listen for this and save before the app locks. */
 export const LOCK_EVENT = "kumbuka:before-lock";
+/** Counts as activity: a session recording keeps the app from auto-locking mid-session. */
+export const ACTIVITY_EVENT = "kumbuka:activity";
 const WARN_SECONDS = 60;
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -61,7 +63,7 @@ function IdleLock({ minutes, onLock }: { minutes: number; onLock: () => void }) 
 
   useEffect(() => {
     const bump = () => { if (!locking.current) { last.current = Date.now(); setSecondsLeft(null); } };
-    const events = ["pointerdown", "keydown", "scroll", "touchstart", "mousemove"] as const;
+    const events = ["pointerdown", "keydown", "scroll", "touchstart", "mousemove", ACTIVITY_EVENT] as const;
     let lastMove = 0;
     const onEvent = (e: Event) => {
       if (e.type === "mousemove") { const n = Date.now(); if (n - lastMove < 5000) return; lastMove = n; }

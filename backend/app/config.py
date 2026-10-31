@@ -38,9 +38,43 @@ class Settings:
     # Public one-click demo organization (fictional data) for investors and partners
     demo_enabled: bool = _bool("DEMO_ENABLED", False)
 
+    # Google Gemini (aistudio.google.com/apikey). Free keys work, but Google's terms say free-tier
+    # content may be read by human reviewers and used to improve Google's products, so on a free key
+    # AI only runs on the fictional demo organisation and on anonymised report figures. Turn on
+    # billing for the key, then set GEMINI_BILLING_ENABLED=true to use it with real clients.
+    gemini_api_key: str = os.getenv("GEMINI_API_KEY", "")
+    gemini_model: str = os.getenv("GEMINI_MODEL", "gemini-3.5-flash-lite")
+    gemini_billing_enabled: bool = _bool("GEMINI_BILLING_ENABLED", False)
+    gemini_base_url: str = os.getenv("GEMINI_BASE_URL", "https://generativelanguage.googleapis.com").rstrip("/")
+
+    @property
+    def ai_provider(self) -> str | None:
+        choice = os.getenv("AI_PROVIDER", "").strip().lower()
+        if choice == "anthropic" and self.anthropic_api_key:
+            return "anthropic"
+        if choice == "gemini" and self.gemini_api_key:
+            return "gemini"
+        if self.gemini_api_key:
+            return "gemini"
+        if self.anthropic_api_key:
+            return "anthropic"
+        return None
+
     @property
     def ai_enabled(self) -> bool:
-        return bool(self.anthropic_api_key)
+        """An AI key is configured (it may still be limited to the demo; see ai_real_data)."""
+        return self.ai_provider is not None
+
+    @property
+    def ai_real_data(self) -> bool:
+        """Whether AI may process real client records. Never on a free Gemini key."""
+        if self.ai_provider == "gemini":
+            return self.gemini_billing_enabled
+        return self.ai_provider == "anthropic"
+
+    def ai_allowed_for(self, org) -> bool:
+        """AI on identifiable client records: real-data provider, or the fictional demo organisation."""
+        return self.ai_enabled and (self.ai_real_data or bool(org and org.is_demo))
 
     @property
     def fernet_key(self) -> bytes:

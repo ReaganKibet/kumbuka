@@ -23,15 +23,16 @@ export class ApiError extends Error {
   constructor(public status: number, message: string) { super(message); }
 }
 
-async function req<T>(method: string, path: string, body?: unknown, opts: { auth?: boolean } = {}): Promise<T> {
+async function req<T>(method: string, path: string, body?: unknown, opts: { auth?: boolean; raw?: Blob } = {}): Promise<T> {
   const headers: Record<string, string> = {};
   const token = opts.auth === false ? null : getToken();
   if (token) headers.Authorization = `Bearer ${token}`;
-  if (body !== undefined) headers["Content-Type"] = "application/json";
+  if (opts.raw) headers["Content-Type"] = opts.raw.type || "application/octet-stream";
+  else if (body !== undefined) headers["Content-Type"] = "application/json";
 
   let res: Response;
   try {
-    res = await fetch(`${API_BASE}/api${path}`, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) });
+    res = await fetch(`${API_BASE}/api${path}`, { method, headers, body: opts.raw ?? (body === undefined ? undefined : JSON.stringify(body)) });
   } catch {
     throw new ApiError(0, "Can't reach the server. Check your internet connection and try again.");
   }
@@ -124,6 +125,13 @@ export const api = {
     if (q.suppress === false) p.set("suppress", "false");
     return req<Report>("GET", `/reports?${p}`);
   },
+  reportNarrative: (q: { start?: string; end?: string; programme_id?: number | "" }) => {
+    const p = new URLSearchParams();
+    if (q.start) p.set("start", q.start);
+    if (q.end) p.set("end", q.end);
+    if (q.programme_id) p.set("programme_id", String(q.programme_id));
+    return req<{ narrative: string }>("POST", `/reports/narrative?${p}`);
+  },
   reportCsv: async (q: { start?: string; end?: string; programme_id?: number | "" }) => {
     const p = new URLSearchParams();
     if (q.start) p.set("start", q.start);
@@ -155,6 +163,11 @@ export const api = {
   signSession: (id: number) => req<Session>("POST", `/sessions/${id}/sign`),
   addAddendum: (id: number, text: string) => req<Session>("POST", `/sessions/${id}/addenda`, { text }),
   aiDraft: (id: number, dictation: string) => req<Draft>("POST", `/sessions/${id}/ai-draft`, { dictation }),
+  transcribe: (id: number, audio: Blob, mode: "dictation" | "session", consent: boolean, seconds?: number) => {
+    const p = new URLSearchParams({ mode, recording_consent: String(consent) });
+    if (seconds) p.set("seconds", String(Math.round(seconds)));
+    return req<{ transcript: string; seconds: number | null }>("POST", `/sessions/${id}/transcribe?${p}`, undefined, { raw: audio });
+  },
 
   measures: () => req<Measure[]>("GET", "/measures"),
   assessments: (clientId: number) => req<Assessment[]>("GET", `/clients/${clientId}/assessments`),
