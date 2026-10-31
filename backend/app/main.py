@@ -8,7 +8,7 @@ from fastapi.staticfiles import StaticFiles
 
 from .config import settings
 from .db import run_migrations
-from .routers import auth, checkins, clients, dashboard, letters, measures, sessions
+from .routers import auth, care, checkins, clients, dashboard, letters, measures, org, reports, sessions
 
 
 @asynccontextmanager
@@ -19,7 +19,7 @@ async def lifespan(_: FastAPI):
 
 app = FastAPI(
     title="Kumbuka",
-    version="0.2.0",
+    version="0.3.0",
     lifespan=lifespan,
     docs_url="/docs" if settings.docs_enabled else None,
     redoc_url=None,
@@ -30,12 +30,13 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins,
     allow_credentials=False,  # auth is a bearer token, not cookies
-    allow_methods=["GET", "POST", "PATCH", "DELETE"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
     allow_headers=["Authorization", "Content-Type"],
     max_age=600,
 )
 
-for r in (auth.router, clients.router, sessions.router, measures.router, dashboard.router, checkins.router, letters.router):
+for r in (auth.router, clients.router, sessions.router, measures.router, dashboard.router, checkins.router,
+          letters.router, org.router, care.router, reports.router):
     app.include_router(r, prefix="/api")
 
 

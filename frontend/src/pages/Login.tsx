@@ -1,15 +1,20 @@
 import { useEffect, useState, type FormEvent } from "react";
-import { Navigate, useNavigate, useSearchParams } from "react-router-dom";
+import { Link, Navigate, useNavigate, useSearchParams } from "react-router-dom";
 import { api } from "../api";
 import { useAuth } from "../auth";
 import { ErrorText, Field } from "../components/ui";
+import { COUNTRIES, ORG_KINDS } from "../lib/africa";
+import type { OrgKind } from "../types";
 
 export default function Login() {
   const { me, signIn } = useAuth();
   const nav = useNavigate();
   const [params] = useSearchParams();
-  const [mode, setMode] = useState<"login" | "register">("login");
+  const [mode, setMode] = useState<"login" | "register">(params.get("mode") === "register" ? "register" : "login");
   const [name, setName] = useState("");
+  const [orgName, setOrgName] = useState("");
+  const [orgKind, setOrgKind] = useState<OrgKind>("ngo");
+  const [country, setCountry] = useState("KE");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [mfaToken, setMfaToken] = useState<string | null>(null);
@@ -59,7 +64,7 @@ export default function Login() {
         signIn(r.token, r.therapist);
         nav("/");
       } else if (mode === "register") {
-        const r = await api.register({ name, email, password });
+        const r = await api.register({ name, email, password, organization_name: orgName, organization_kind: orgKind, country });
         setNext("/settings?welcome=1");
         signIn(r.token, r.therapist);
       } else {
@@ -76,23 +81,23 @@ export default function Login() {
   }
 
   const canRegister = registration === true;
-  const heading = mfaToken ? "Enter your code" : mode === "login" ? "Sign in" : "Create your account";
+  const heading = mfaToken ? "Enter your code" : mode === "login" ? "Sign in" : "Set up your organisation";
 
   return (
     <div className="grid min-h-screen md:grid-cols-[1fr_28rem]">
       <section className="hidden flex-col justify-end bg-pine p-12 text-mist md:flex">
-        <p className="font-serif text-6xl leading-none tracking-tight">kumbuka</p>
+        <Link to="/welcome" className="font-serif text-6xl leading-none tracking-tight">kumbuka</Link>
         <p className="mt-4 max-w-md font-serif text-xl leading-relaxed text-mist/85">
-          Speak your notes after each session. Keep every client's story, scores and goals in one quiet place.
+          Counselling records, supervision and impact reporting for Africa's schools, NGOs and counselling centres.
         </p>
       </section>
 
       <section className="flex flex-col justify-center bg-paper px-6 py-12 md:px-12">
-        <p className="mb-8 font-serif text-4xl text-pine md:hidden">kumbuka</p>
+        <Link to="/welcome" className="mb-8 font-serif text-4xl text-pine md:hidden">kumbuka</Link>
         {notice && !mfaToken && <p className="mb-6 rounded-md bg-sage px-3 py-2 text-sm text-pine-deep">{notice}</p>}
         <h1 className="font-serif text-3xl">{heading}</h1>
         {mode === "register" && !mfaToken && (
-          <p className="mt-1 text-sm text-muted">This first account becomes the practice owner. Sign-ups close after it's created.</p>
+          <p className="mt-1 text-sm text-muted">You'll be the owner. Invite your counsellors, supervisors and M&E staff once you're in.</p>
         )}
 
         <form onSubmit={submit} className="mt-6 space-y-4">
@@ -106,9 +111,26 @@ export default function Login() {
           ) : (
             <>
               {mode === "register" && (
-                <Field label="Your name">
-                  <input className="field" value={name} onChange={(e) => setName(e.target.value)} required autoComplete="name" />
-                </Field>
+                <>
+                  <Field label="Organisation name" hint="Your NGO, school, centre or practice.">
+                    <input className="field" value={orgName} onChange={(e) => setOrgName(e.target.value)} required autoComplete="organization" />
+                  </Field>
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <Field label="Type">
+                      <select className="field" value={orgKind} onChange={(e) => setOrgKind(e.target.value as OrgKind)}>
+                        {Object.entries(ORG_KINDS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+                      </select>
+                    </Field>
+                    <Field label="Country">
+                      <select className="field" value={country} onChange={(e) => setCountry(e.target.value)}>
+                        {COUNTRIES.map((c) => <option key={c.code} value={c.code}>{c.name}</option>)}
+                      </select>
+                    </Field>
+                  </div>
+                  <Field label="Your name">
+                    <input className="field" value={name} onChange={(e) => setName(e.target.value)} required autoComplete="name" />
+                  </Field>
+                </>
               )}
               <Field label="Email">
                 <input className="field" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required autoComplete="email" />
@@ -124,7 +146,7 @@ export default function Login() {
           )}
           <ErrorText error={error} />
           <button className="btn btn-primary w-full justify-center py-2.5" disabled={busy}>
-            {busy ? "Please wait…" : mfaToken ? "Verify" : mode === "login" ? "Sign in" : "Create account"}
+            {busy ? "Please wait…" : mfaToken ? "Verify" : mode === "login" ? "Sign in" : "Create organisation"}
           </button>
           {waking && <p className="text-center text-sm text-muted">Waking the server up. The first sign-in of the day can take up to a minute.</p>}
         </form>
@@ -142,16 +164,15 @@ export default function Login() {
             {registration === null && <p className="text-muted">Checking whether this site is set up…</p>}
             {canRegister && (
               <>
-                <p className="text-muted">No account exists here yet.</p>
+                <p className="text-muted">New to Kumbuka?</p>
                 <button className="btn btn-quiet mt-2 w-full justify-center" onClick={() => { setMode("register"); setError(null); }}>
-                  Set up the practice account
+                  Set up your organisation
                 </button>
               </>
             )}
             {registration === false && (
               <p className="text-muted">
-                This practice is already set up, so new sign-ups are closed. Sign in with the account's email and password,
-                or ask the practice owner for access.
+                New organisations can't sign up here. If you work for an organisation that uses Kumbuka, ask its administrator for an invitation link.
               </p>
             )}
             {registration === "offline" && (

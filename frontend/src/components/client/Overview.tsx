@@ -97,7 +97,7 @@ export default function Overview({ client }: { client: Client }) {
                     <span className="font-serif text-2xl tabular-nums">{s.total}</span>{" "}
                     <span className="text-sm text-muted">{s.severity}</span>
                     {s.change !== null && s.change !== 0 && (
-                      <span className={`ml-2 text-sm font-bold ${s.change < 0 ? "text-pine" : "text-flag"}`}>
+                      <span className={`ml-2 text-sm font-bold ${(s.kind === "WHO-5" ? s.change > 0 : s.change < 0) ? "text-pine" : "text-flag"}`}>
                         {s.change < 0 ? "▼" : "▲"} {Math.abs(s.change)}
                       </span>
                     )}
@@ -105,7 +105,7 @@ export default function Overview({ client }: { client: Client }) {
                 </li>
               ))}
             </ul>
-            <p className="mt-1 text-xs text-muted">Lower scores mean fewer symptoms.</p>
+            <p className="mt-1 text-xs text-muted">PHQ-9 and GAD-7: lower is better. WHO-5: higher is better.</p>
           </section>
         )}
 

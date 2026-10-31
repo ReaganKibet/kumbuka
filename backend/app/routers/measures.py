@@ -7,7 +7,7 @@ from ..db import get_db
 from ..measures import MeasureError, public_definitions, score
 from ..models import Assessment, Goal, Therapist
 from ..schemas import AssessmentIn, AssessmentOut, GoalIn, GoalOut, GoalUpdate
-from ..security import audit, current_therapist, owned_client
+from ..security import audit, clinical_only, current_therapist, owned_client
 
 router = APIRouter(tags=["measures & goals"])
 
@@ -27,7 +27,7 @@ def list_assessments(client_id: int, db: Session = Depends(get_db), me: Therapis
 
 @router.post("/clients/{client_id}/assessments", response_model=AssessmentOut, status_code=201)
 def add_assessment(
-    client_id: int, body: AssessmentIn, db: Session = Depends(get_db), me: Therapist = Depends(current_therapist)
+    client_id: int, body: AssessmentIn, db: Session = Depends(get_db), me: Therapist = Depends(clinical_only)
 ):
     client = owned_client(db, client_id, me)
     try:
@@ -54,8 +54,9 @@ def add_assessment(
 @router.delete("/assessments/{assessment_id}", status_code=204)
 def delete_assessment(assessment_id: int, db: Session = Depends(get_db), me: Therapist = Depends(current_therapist)):
     a = db.get(Assessment, assessment_id)
-    if a is None or a.therapist_id != me.id:
+    if a is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Assessment not found")
+    owned_client(db, a.client_id, me)
     audit(db, me, "delete", "assessment", a.id)
     db.delete(a)
     db.commit()
@@ -80,8 +81,9 @@ def add_goal(client_id: int, body: GoalIn, db: Session = Depends(get_db), me: Th
 
 def _owned_goal(db: Session, goal_id: int, me: Therapist) -> Goal:
     g = db.get(Goal, goal_id)
-    if g is None or g.therapist_id != me.id:
+    if g is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Goal not found")
+    owned_client(db, g.client_id, me)
     return g
 
 

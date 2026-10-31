@@ -4,6 +4,8 @@ import { useSearchParams } from "react-router-dom";
 import { api, setToken } from "../api";
 import { useAuth } from "../auth";
 import { ErrorText, Field } from "../components/ui";
+import { OrgDetails, Programmes } from "../components/OrgSettings";
+import { isAdmin } from "../lib/roles";
 
 function Section({ title, intro, children }: { title: string; intro?: string; children: ReactNode }) {
   return (
@@ -41,7 +43,7 @@ function Profile() {
       <div className="grid gap-4 sm:grid-cols-2">
         <Field label="Your name"><input className="field" required {...bind("name")} /></Field>
         <Field label="Title" hint="e.g. Counselling Psychologist"><input className="field" {...bind("title")} /></Field>
-        <Field label="Practice name"><input className="field" {...bind("practice_name")} /></Field>
+        <Field label="Organisation name on letters" hint="Leave as your organisation, or your own practice name."><input className="field" {...bind("practice_name")} /></Field>
         <Field label="Registration number" hint="Your professional licence number."><input className="field" {...bind("license_no")} /></Field>
         <Field label="Practice phone"><input className="field" type="tel" {...bind("phone")} /></Field>
       </div>
@@ -211,21 +213,30 @@ function Devices() {
 
 export default function Settings() {
   const [params] = useSearchParams();
-  const { config } = useAuth();
+  const { config, me } = useAuth();
+  const demo = !!me?.organization?.is_demo;
   useEffect(() => { window.scrollTo(0, 0); }, []);
   return (
     <div>
       <h1 className="font-serif text-4xl tracking-tight">Settings</h1>
       {params.get("welcome") && (
         <p className="mt-4 max-w-2xl rounded-md bg-sage px-4 py-3 text-pine-deep">
-          Welcome. Add your practice details for printed notes and letters, then turn on two-step sign-in below.
+          Welcome. {isAdmin(me) ? "Add your programmes and crisis lines, then invite your team from the Team page. " : ""}Add your details for printed notes and letters, then turn on two-step sign-in below.
         </p>
       )}
       <div className="mt-6">
-        <Section title="Practice details" intro="Shown at the top of printed notes and letters."><Profile /></Section>
-        <Section title="Two-step sign-in" intro="A code from your phone as well as your password. Strongly recommended for client records."><TwoStep /></Section>
-        <Section title="Password"><Password /></Section>
-        <Section title="Devices" intro={`Kumbuka also locks itself after ${config?.idle_lock_minutes ?? 15} minutes without activity.`}><Devices /></Section>
+        {isAdmin(me) && <Section title="Organisation" intro="Settings for everyone in your organisation."><OrgDetails /></Section>}
+        {isAdmin(me) && <Section title="Programmes" intro="Funded programmes or service lines. Clients and groups belong to one, and reports can be filtered by it."><Programmes /></Section>}
+        <Section title="Your details" intro="Shown on printed notes and letters you sign."><Profile /></Section>
+        {demo ? (
+          <Section title="Security"><p className="text-muted">Password and two-step sign-in are locked on shared demo accounts.</p></Section>
+        ) : (
+          <>
+            <Section title="Two-step sign-in" intro="A code from your phone as well as your password. Strongly recommended for client records."><TwoStep /></Section>
+            <Section title="Password"><Password /></Section>
+            <Section title="Devices" intro={`Kumbuka also locks itself after ${config?.idle_lock_minutes ?? 15} minutes without activity.`}><Devices /></Section>
+          </>
+        )}
       </div>
     </div>
   );

@@ -8,6 +8,10 @@ import SessionsTab from "../components/client/SessionsTab";
 import MeasuresTab from "../components/client/MeasuresTab";
 import GoalsTab from "../components/client/GoalsTab";
 import LettersTab from "../components/client/LettersTab";
+import ReferralsTab from "../components/client/ReferralsTab";
+import { useAuth } from "../auth";
+import { isSupervisor } from "../lib/roles";
+import { fmtDate, Modal } from "../components/ui";
 import type { Client } from "../types";
 
 const TABS = [
@@ -15,6 +19,7 @@ const TABS = [
   { id: "sessions", label: "Sessions" },
   { id: "questionnaires", label: "Questionnaires" },
   { id: "goals", label: "Goals" },
+  { id: "referrals", label: "Referrals" },
   { id: "letters", label: "Letters" },
   { id: "profile", label: "Profile" },
 ] as const;
@@ -34,6 +39,9 @@ export default function ClientPage() {
   const tab = (TABS.find((t) => t.id === params.get("tab"))?.id ?? "overview") as Tab;
   const [client, setClient] = useState<Client | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const { me } = useAuth();
+  const [escalating, setEscalating] = useState(false);
+  const [escNote, setEscNote] = useState("");
 
   const load = useCallback(() => api.client(id).then(setClient).catch((e) => setError(e.message)), [id]);
   useEffect(() => { load(); }, [load]);
@@ -69,8 +77,41 @@ export default function ClientPage() {
           <RiskTag level={client.risk_level} />
           {client.status !== "active" && <StatusTag>{client.status}</StatusTag>}
           {!client.consent_signed && <StatusTag tone="flag">Consent not recorded</StatusTag>}
+          {a !== null && a < 18 && !client.guardian_consent && <StatusTag tone="flag">Under 18: guardian consent not recorded</StatusTag>}
+          {client.restricted && <StatusTag tone="risk">Restricted case</StatusTag>}
+        </p>
+        <p className="mt-1 text-sm text-muted">
+          Counsellor: <span className="text-ink">{client.counsellor_name}</span>
+          {client.programme_name && <>. Programme: <span className="text-ink">{client.programme_name}</span></>}
         </p>
       </header>
+
+      {client.escalated_at ? (
+        <div className="mb-6 flex flex-wrap items-start justify-between gap-3 rounded-lg border-l-4 border-flag bg-flag-soft px-4 py-3">
+          <div>
+            <p className="font-bold text-flag">Escalated to a supervisor, {fmtDate(client.escalated_at, true)}</p>
+            <p className="note-text mt-0.5">{client.escalation_note}</p>
+          </div>
+          {isSupervisor(me) && (
+            <button className="btn btn-quiet bg-paper" onClick={async () => setClient(await api.resolveEscalation(id))}>Mark as handled</button>
+          )}
+        </div>
+      ) : me?.role !== "me_officer" && (
+        <div className="-mt-3 mb-5">
+          <button className="text-sm text-muted underline underline-offset-2 hover:text-ink" onClick={() => setEscalating(true)}>
+            Ask a supervisor for help with this client
+          </button>
+        </div>
+      )}
+
+      <Modal open={escalating} onClose={() => setEscalating(false)} title="Escalate to a supervisor">
+        <p className="text-sm text-muted">Your supervisor sees this straight away on their Supervision page. If someone is in immediate danger, call emergency services first.</p>
+        <textarea className="field note-text mt-3" rows={4} value={escNote} onChange={(e) => setEscNote(e.target.value)}
+          placeholder="What's worrying you, and what do you need?" aria-label="Escalation note" />
+        <button className="btn btn-primary mt-3" disabled={!escNote.trim()} onClick={async () => {
+          setClient(await api.escalate(id, escNote.trim())); setEscalating(false); setEscNote("");
+        }}>Escalate</button>
+      </Modal>
 
       {(client.risk_level === "medium" || client.risk_level === "high") && (
         <div className="mb-6 rounded-lg border-l-4 border-risk bg-risk-soft px-4 py-3">
@@ -98,6 +139,7 @@ export default function ClientPage() {
       {tab === "sessions" && <SessionsTab clientId={id} />}
       {tab === "questionnaires" && <MeasuresTab client={client} />}
       {tab === "goals" && <GoalsTab clientId={id} />}
+      {tab === "referrals" && <ReferralsTab clientId={id} />}
       {tab === "letters" && <LettersTab client={client} />}
       {tab === "profile" && (
         <div className="max-w-3xl">

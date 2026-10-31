@@ -1,6 +1,18 @@
-import { useState, type FormEvent } from "react";
-import type { Client } from "../types";
+import { useEffect, useState, type FormEvent } from "react";
+import { api } from "../api";
+import { useAuth } from "../auth";
+import { GENDERS, ROLES } from "../lib/africa";
+import { isSupervisor } from "../lib/roles";
+import type { Client, Member, Programme } from "../types";
 import { ErrorText, Field } from "./ui";
+
+function ageOf(dob: string) {
+  if (!dob) return null;
+  const b = new Date(dob), n = new Date();
+  let a = n.getFullYear() - b.getFullYear();
+  if (n < new Date(n.getFullYear(), b.getMonth(), b.getDate())) a--;
+  return a;
+}
 
 type Props = {
   initial?: Partial<Client>;
@@ -27,7 +39,25 @@ export default function ClientForm({ initial = {}, submitLabel, onSubmit, full }
     risk_level: initial.risk_level ?? "none",
     risk_notes: initial.risk_notes ?? "",
     status: initial.status ?? "active",
+    programme_id: initial.programme_id ? String(initial.programme_id) : "",
+    therapist_id: initial.therapist_id ? String(initial.therapist_id) : "",
+    gender: initial.gender ?? "",
+    location: initial.location ?? "",
+    referral_source: initial.referral_source ?? "",
+    guardian_name: initial.guardian_name ?? "",
+    guardian_phone: initial.guardian_phone ?? "",
+    guardian_consent: initial.guardian_consent ?? false,
+    restricted: initial.restricted ?? false,
   });
+  const { me } = useAuth();
+  const [programmes, setProgrammes] = useState<Programme[]>([]);
+  const [team, setTeam] = useState<Member[]>([]);
+  useEffect(() => {
+    api.programmes().then((p) => setProgrammes(p.filter((x) => x.active || String(x.id) === v.programme_id))).catch(() => {});
+    if (isSupervisor(me)) api.team().then((t) => setTeam(t.filter((m) => m.active && m.role !== "me_officer"))).catch(() => {});
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  const age = ageOf(v.date_of_birth);
+  const minor = age !== null && age < 18;
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -55,6 +85,13 @@ export default function ClientForm({ initial = {}, submitLabel, onSubmit, full }
         presenting_concern: empty(v.presenting_concern),
         background: empty(v.background),
         risk_notes: empty(v.risk_notes),
+        programme_id: v.programme_id ? Number(v.programme_id) : null,
+        therapist_id: v.therapist_id ? Number(v.therapist_id) : undefined,
+        gender: (v.gender || null) as Client["gender"],
+        location: empty(v.location),
+        referral_source: empty(v.referral_source),
+        guardian_name: empty(v.guardian_name),
+        guardian_phone: empty(v.guardian_phone),
       } as Partial<Client>);
       setSaved(true);
     } catch (err) {
@@ -73,15 +110,58 @@ export default function ClientForm({ initial = {}, submitLabel, onSubmit, full }
         <Field label="Phone"><input className="field" type="tel" {...text("phone")} /></Field>
         <Field label="Email"><input className="field" type="email" {...text("email")} /></Field>
         <span className="hidden sm:block" />
+        <Field label="Gender">
+          <select className="field" value={v.gender} onChange={(e) => set("gender", e.target.value)}>
+            <option value="">Not recorded</option>
+            {Object.entries(GENDERS).map(([k, l]) => <option key={k} value={k}>{l}</option>)}
+          </select>
+        </Field>
         <Field label="Emergency contact"><input className="field" {...text("emergency_contact_name")} /></Field>
         <Field label="Emergency contact phone"><input className="field" type="tel" {...text("emergency_contact_phone")} /></Field>
       </fieldset>
+
+      <fieldset className="grid gap-4 sm:grid-cols-2">
+        <Field label="Programme">
+          <select className="field" value={v.programme_id} onChange={(e) => set("programme_id", e.target.value)}>
+            <option value="">None</option>
+            {programmes.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+          </select>
+        </Field>
+        <Field label="Location" hint="County, area or school. Used in anonymised reports.">
+          <input className="field" {...text("location")} />
+        </Field>
+        <Field label="Referred by" hint="e.g. teacher, self, health facility, chief, CHV">
+          <input className="field" {...text("referral_source")} />
+        </Field>
+        {team.length > 0 && (
+          <Field label="Counsellor">
+            <select className="field" value={v.therapist_id} onChange={(e) => set("therapist_id", e.target.value)}>
+              <option value="">{full ? "Unchanged" : "Me"}</option>
+              {team.map((m) => <option key={m.id} value={m.id}>{m.name} ({ROLES[m.role]?.label})</option>)}
+            </select>
+          </Field>
+        )}
+      </fieldset>
+
+      {minor && (
+        <fieldset className="space-y-3 rounded-lg border border-flag/40 bg-flag-soft/40 p-4">
+          <legend className="px-1 text-sm font-bold">Under 18: parent or guardian</legend>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field label="Guardian's name"><input className="field" {...text("guardian_name")} /></Field>
+            <Field label="Guardian's phone"><input className="field" type="tel" {...text("guardian_phone")} /></Field>
+          </div>
+          <label className="flex items-start gap-2.5">
+            <input type="checkbox" className="mt-1 size-4 accent-pine" checked={v.guardian_consent} onChange={(e) => set("guardian_consent", e.target.checked)} />
+            <span>Guardian consent recorded<span className="block text-sm text-muted">Or note in Background why counselling went ahead without it (e.g. safeguarding).</span></span>
+          </label>
+        </fieldset>
+      )}
 
       <fieldset className="space-y-4">
         <Field label="Why they came" hint="The presenting concern, in their words where possible.">
           <textarea className="field note-text" rows={3} {...text("presenting_concern")} />
         </Field>
-        <Field label="Background" hint="Relevant history: family, work or school, health, previous counseling.">
+        <Field label="Background" hint="Relevant history: family, work or school, health, previous counselling.">
           <textarea className="field note-text" rows={4} {...text("background")} />
         </Field>
       </fieldset>
@@ -100,6 +180,14 @@ export default function ClientForm({ initial = {}, submitLabel, onSubmit, full }
           </span>
         </label>
       </fieldset>
+
+      <label className="flex items-start gap-2.5">
+        <input type="checkbox" className="mt-1 size-4 accent-pine" checked={v.restricted} onChange={(e) => set("restricted", e.target.checked)} />
+        <span>
+          Restricted case
+          <span className="block text-sm text-muted">Only the assigned counsellor and their supervisor can open it, not other admins. Use for GBV, abuse or staff-related cases.</span>
+        </span>
+      </label>
 
       {full && (
         <fieldset className="grid gap-4 sm:grid-cols-2">

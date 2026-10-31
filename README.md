@@ -1,41 +1,63 @@
 # Kumbuka
 
-Session notes for counselors. *Kumbuka* is Swahili for "remember".
+Counselling records, supervision and impact reporting for Africa's schools, NGOs and counselling centres. *Kumbuka* is Swahili for "remember".
 
-A counselor speaks or types rough notes after a session, and Kumbuka turns them into a structured DAP note. It keeps each client's history, scores, goals and letters in one place, and prepares a short brief before the next session.
+**Live:** https://kumbukatherapy.netlify.app (landing page with a one-click demo).
 
 **Stack:** React + TypeScript (Vite, Tailwind) on **Netlify** · FastAPI + SQLAlchemy + Alembic on **Render** · Postgres (**Supabase**) · Claude API (optional)
 
+## Who it's for
+
+Organisations that deliver counselling or psychosocial support at scale, often through lay counsellors under clinical supervision, and that must report outcomes to funders: NGOs, schools and universities, counselling centres, faith-based and county services. Each organisation's data is fully isolated, and all 54 African countries are supported for phone numbers and settings.
+
 ## Features
 
-**Clients and notes**
-- Client profile, presenting concern, background, emergency contact, consent (with separate consent for AI-assisted notes), risk level and safety plan.
-- DAP session notes: dictate in the browser, then **Draft the note** turns rough notes into Data, Assessment, Plan, interventions, homework and a risk check.
-- **Signing** locks a note. Corrections become dated addenda. Private reflections are never exported or sent to AI.
-- Goals with progress; PHQ-9 and GAD-7 with auto-scoring, severity bands, trend charts and a flag when PHQ-9 item 9 is endorsed.
-- Overview / pre-session brief, Today screen, activity log, and a "download record" export for access requests.
+**Organisations, roles and programmes**
+- Sign-up creates an organisation (NGO, school, centre, practice…) with its country. Staff join by invitation link (WhatsApp, email or copy).
+- **Roles:** owner, administrator, clinical supervisor, counsellor, lay counsellor and M&E officer, each seeing only what it needs:
+  - Counsellors and lay counsellors see their own clients.
+  - Supervisors see their team's clients.
+  - Admins see everyone except restricted cases.
+  - M&E officers see anonymised reports only.
+- **Programmes** (e.g. "Schools Wellbeing, Kibera", with an optional funder) group clients and group sessions, and reports can be filtered by them.
+- **Caseload transfer** when someone leaves. Deactivated staff are signed out immediately.
 
-**Client check-in links**
-- From a client's Questionnaires tab, **Send a check-in link**. Kumbuka writes a short, neutral message (it doesn't mention counseling) for WhatsApp, SMS or copying.
-- The client opens the link on their phone. It asks for their mood (1–10), a PHQ-9 and/or GAD-7, and an optional message to the counselor. No sign-in is needed.
-- Links work once and expire (1, 3 or 7 days). Only a hash of each link is stored.
-- Scores land in the client's record, marked "by client". The message shows on the client overview, and new check-ins show on the Today screen.
-- If the client endorses PHQ-9 item 9, the thank-you page shows Kenyan support lines: 999/112, Kenya Red Cross 1199, and Befrienders Kenya +254 722 178 177. They're in `frontend/src/pages/CheckIn.tsx`; recheck the numbers from time to time.
+**Supervision (task-sharing)**
+- Lay counsellors' notes go to their supervisor to **co-sign** or **return with feedback**. Organisations can require this for all counsellors.
+- **Escalation:** any counsellor can ask a supervisor for help with a client. It appears straight away in the supervisor's queue.
+- The **Supervision page** shows notes to review, escalations, high-risk clients and each team member's caseload and late notes.
 
-**Printing and letters**
-- Practice letterhead (practice name, title, registration number, address) in **Settings**.
-- **Print or save as PDF**: signed session notes, a client summary (attendance, goals, score chart and table, risk), and letters.
-- Letters tab: confirmation of attendance (dates filled in automatically, content not disclosed), referral (optionally drafted by AI from signed notes; the client's name is never sent to AI), and blank letters. Letters are saved per client and included in the record export.
-- Prints are recorded in the activity log.
+**Clients and sessions**
+- Notes in DAP format, written by voice dictation or AI drafting (optional, with consent).
+- **Signing locks a note**; later corrections become addenda.
+- **Private reflections** are visible only to their author, never even to supervisors.
+- **Questionnaires:** PHQ-9, GAD-7 and WHO-5, with trend charts and a self-harm flag on PHQ-9 item 9.
+- **Goals**, plus **letters** printed on the organisation's letterhead.
+- **Minors:** guardian name, phone and consent are prompted automatically for clients under 18.
+- **Restricted cases** (GBV, abuse, staff-related) can be opened only by the counsellor and their supervisor.
+- **WhatsApp/SMS check-in links:** clients answer questionnaires on their phone. The organisation's own crisis lines are shown afterwards, with Kenyan defaults.
 
-**Security**
-- Two-step sign-in with any authenticator app, plus 8 one-time recovery codes. Each code works only once, and the secret is encrypted at rest.
-- An account locks for 15 minutes after 5 wrong attempts. Sign-in attempts are also rate-limited per network, and failed and locked sign-ins are logged.
-- **Auto-lock** after 15 minutes without activity (`IDLE_LOCK_MINUTES`). A one-minute warning appears, and open drafts are saved first.
-- **Sign out everywhere**. Changing the password also signs out other devices.
-- Only the first account can register by default (`ALLOW_REGISTRATION=first`), so a public URL can't be used to sign up.
-- Every query is scoped to the signed-in counselor. Security headers and a strict Content-Security-Policy are set, and API docs are hidden in production.
-- The app refuses to start in production with SQLite or a weak `SECRET_KEY`.
+**Groups and referrals**
+- **Group sessions** (school wellbeing circles, support groups) with an attendance register. New members can be registered on the spot.
+- **Referrals** to medical, psychiatric, legal, child protection, GBV, education or economic services. Each referral gets an automatic follow-up date based on urgency and an outcome, and overdue follow-ups are highlighted.
+
+**Funder / M&E reports** (`/reports`, CSV export, print to PDF)
+- **Reach:** people reached and new clients, one-to-one and group attendance, and the no-show rate.
+- **Who was reached:** breakdowns by gender, age band (under-18s separated), location and programme.
+- **Outcomes** for PHQ-9, GAD-7 and WHO-5:
+  - **Improved:** a reliable change from first to latest score (PHQ-9 down 5 or more points, GAD-7 down 4 or more, WHO-5 up 10 or more).
+  - **Recovered:** crossing the clinical cut-off.
+  - Average scores at first and latest assessment.
+- **Referral completion**, **safeguarding** counts and **record quality** (notes signed within 48 hours, notes awaiting review).
+- Every figure is calculated from structured data, never by AI. Any group of 1–4 people shows as "<5", and exports are always suppressed this way.
+
+**Security:** two-step sign-in and recovery codes, lockout and rate limiting, auto-lock after inactivity, sign out everywhere, per-organisation activity log (admins see everyone's actions), security headers and CSP.
+
+**Investor / partner demo:** with `DEMO_ENABLED=true`, the landing page offers one-click entry into *Tumaini Youth Wellbeing Trust*, a fictional Kenyan NGO:
+- Two programmes and seven staff.
+- About 46 clients over four months, with groups, referrals, notes awaiting review and an escalation.
+- Five roles to choose from: director, supervisor, counsellor, lay counsellor and M&E officer.
+- It rebuilds itself every 24 hours. Demo accounts can't change passwords, set up two-step sign-in or send invitations.
 
 ## Deploy: Render (API) + Netlify (frontend) + Supabase (database)
 
@@ -63,7 +85,7 @@ The free plan sleeps after 15 idle minutes, so the first request after a break t
 
 **4. First sign-in**
 
-Open the Netlify URL and create the account. That's the practice owner, and sign-ups close after it. Then go to Settings, add the practice details and turn on two-step sign-in.
+Open the Netlify URL and choose **Set up your organisation**. The person who signs up becomes the owner. Then go to Settings to add programmes and crisis lines, invite staff from **Team**, and turn on two-step sign-in. `ALLOW_REGISTRATION` controls sign-ups: `true` lets any organisation sign up (the default on Render), `first` allows only the first account, and `false` closes sign-ups.
 
 ## Run locally
 
@@ -82,7 +104,7 @@ uvicorn app.main:app --reload --port 8000
 cd frontend && npm install && npm run dev              # http://localhost:5173
 ```
 
-The demo login (after `seed_demo.py`) is `demo@example.com` / `demo-password`. API docs are at http://localhost:8000/docs.
+For the demo, set `DEMO_ENABLED=true` in `.env` and open http://localhost:5173/welcome, or run `python seed_demo.py` to build it straight away. API docs are at http://localhost:8000/docs.
 
 **Tests:** `cd backend && pytest` (SQLite). To run against Postgres, use `TEST_DATABASE_URL=postgresql://... pytest`.
 

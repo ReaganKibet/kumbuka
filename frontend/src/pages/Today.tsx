@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, Navigate } from "react-router-dom";
 import { api } from "../api";
 import { useAuth } from "../auth";
 import { ErrorText, fmtDate, fmtTime, Loading, StatusTag } from "../components/ui";
@@ -38,6 +38,7 @@ export default function Today() {
   useEffect(() => { api.dashboard().then(setD).catch((e) => setError(e.message)); }, []);
 
   if (error) return <ErrorText error={error} />;
+  if (me?.role === "me_officer") return <Navigate to="/reports" replace />;
   if (!d) return <Loading />;
 
   const first = me?.name.split(" ")[0];
@@ -51,6 +52,27 @@ export default function Today() {
           {d.unsigned.length > 0 && `${d.unsigned.length} note${d.unsigned.length > 1 ? "s" : ""} waiting to be signed.`}
         </p>
       </header>
+
+      {(d.counts.returned_notes > 0 || (d.supervision && (d.supervision.pending_reviews > 0 || d.supervision.escalations > 0))) && (
+        <section className="mb-6 flex flex-wrap gap-3" aria-label="Supervision">
+          {d.counts.returned_notes > 0 && (
+            <Link to="/clients" className="rounded-lg bg-flag-soft px-4 py-3 text-flag ring-1 ring-flag/30 hover:ring-flag">
+              <span className="font-bold">{d.counts.returned_notes} note{d.counts.returned_notes > 1 ? "s" : ""} returned</span> by your supervisor with feedback.
+              Open them from Notes to finish.
+            </Link>
+          )}
+          {d.supervision && d.supervision.pending_reviews > 0 && (
+            <Link to="/supervision" className="rounded-lg bg-paper px-4 py-3 ring-1 ring-line hover:ring-pine">
+              <span className="font-bold">{d.supervision.pending_reviews}</span> note{d.supervision.pending_reviews > 1 ? "s" : ""} waiting for your co-signature
+            </Link>
+          )}
+          {d.supervision && d.supervision.escalations > 0 && (
+            <Link to="/supervision" className="rounded-lg bg-risk-soft px-4 py-3 text-risk ring-1 ring-risk/30 hover:ring-risk">
+              <span className="font-bold">{d.supervision.escalations}</span> escalated case{d.supervision.escalations > 1 ? "s" : ""}
+            </Link>
+          )}
+        </section>
+      )}
 
       {d.attention.length > 0 && (
         <section className="mb-8 rounded-lg border border-risk/30 bg-risk-soft/60 p-4" aria-label="Needs attention">

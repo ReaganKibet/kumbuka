@@ -11,6 +11,7 @@ export default function Clients() {
   const [error, setError] = useState<string | null>(null);
   const [q, setQ] = useState("");
   const [show, setShow] = useState<"active" | "all">("active");
+  const [prog, setProg] = useState("");
   const [adding, setAdding] = useState(false);
 
   useEffect(() => { api.clients().then(setRows).catch((e) => setError(e.message)); }, []);
@@ -21,9 +22,11 @@ export default function Clients() {
     return rows.filter(
       (r) =>
         (show === "all" || r.status === "active") &&
+        (!prog || r.programme_name === prog) &&
         (!term || r.full_name.toLowerCase().includes(term) || (r.preferred_name ?? "").toLowerCase().includes(term)),
     );
-  }, [rows, q, show]);
+  }, [rows, q, show, prog]);
+  const programmeNames = [...new Set((rows ?? []).map((r) => r.programme_name).filter(Boolean))] as string[];
 
   return (
     <div>
@@ -38,6 +41,12 @@ export default function Clients() {
           <option value="active">Active only</option>
           <option value="all">Everyone, including paused and closed</option>
         </select>
+        {programmeNames.length > 0 && (
+          <select className="field w-auto" value={prog} onChange={(e) => setProg(e.target.value)} aria-label="Programme">
+            <option value="">All programmes</option>
+            {programmeNames.map((p) => <option key={p}>{p}</option>)}
+          </select>
+        )}
       </div>
 
       <ErrorText error={error} />
@@ -53,10 +62,11 @@ export default function Clients() {
 
       {rows && rows.length > 0 && (
         <div className="overflow-x-auto rounded-lg border border-line bg-paper">
-          <table className="w-full min-w-[40rem] text-left text-sm">
+          <table className="w-full min-w-[48rem] text-left text-sm">
             <thead className="border-b border-line text-muted">
               <tr>
                 <th className="px-4 py-2.5 font-bold">Name</th>
+                <th className="px-4 py-2.5 font-bold">Counsellor</th>
                 <th className="px-4 py-2.5 font-bold">Last seen</th>
                 <th className="px-4 py-2.5 font-bold">Next session</th>
                 <th className="px-4 py-2.5 font-bold">Sessions</th>
@@ -74,8 +84,12 @@ export default function Clients() {
                     <span className="ml-2 inline-flex gap-1.5 align-middle">
                       <RiskTag level={r.risk_level} />
                       {r.status !== "active" && <StatusTag>{r.status}</StatusTag>}
+                      {r.restricted && <StatusTag tone="risk">Restricted</StatusTag>}
+                      {r.escalated && <StatusTag tone="flag">Escalated</StatusTag>}
                     </span>
+                    {r.programme_name && <span className="block text-xs text-muted">{r.programme_name}</span>}
                   </td>
+                  <td className="px-4 py-3">{r.counsellor_name}</td>
                   <td className="px-4 py-3 tabular-nums">{fmtDate(r.last_session)}</td>
                   <td className="px-4 py-3 tabular-nums">{fmtDate(r.next_session, true)}</td>
                   <td className="px-4 py-3 tabular-nums">{r.session_count}</td>
@@ -85,7 +99,7 @@ export default function Clients() {
                 </tr>
               ))}
               {visible.length === 0 && (
-                <tr><td colSpan={5} className="px-4 py-6 text-center text-muted">No clients match.</td></tr>
+                <tr><td colSpan={6} className="px-4 py-6 text-center text-muted">No clients match.</td></tr>
               )}
             </tbody>
           </table>

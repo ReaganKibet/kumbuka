@@ -16,11 +16,28 @@ from sqlalchemy.orm import Session
 from ..config import local_now
 from ..db import get_db
 from ..measures import MEASURES, MeasureError, public_definitions, score
-from ..models import Assessment, CheckinLink, Client, Therapist
+from ..models import Assessment, CheckinLink, Client, Organization, Therapist
 from ..schemas import CheckinCreate, CheckinCreated, CheckinOut, PublicCheckinIn, PublicCheckinOut, PublicCheckinResult
-from ..security import audit, client_ip, current_therapist, owned_client, public_ip_limiter, utcnow_naive
+from ..security import audit, client_ip, clinical_only, current_therapist, owned_client, public_ip_limiter, utcnow_naive
 
 router = APIRouter(tags=["check-ins"])
+
+# Questions are shown to the client in their own voice.
+CLIENT_PROMPTS = {
+    "PHQ-9": "Over the last 2 weeks, how often have you been bothered by any of the following problems?",
+    "GAD-7": "Over the last 2 weeks, how often have you been bothered by the following problems?",
+    "WHO-5": "Over the last two weeks, how much of the time have you felt the following?",
+}
+
+# Shown to clients when an organization hasn't set its own crisis contacts.
+# Only countries whose numbers have been verified are listed (last checked October 2026).
+DEFAULT_SUPPORT = {
+    "KE": [
+        {"name": "Emergency services", "number": "999", "note": "If you are in danger right now (or 112)"},
+        {"name": "Kenya Red Cross", "number": "1199", "note": "Free call"},
+        {"name": "Befrienders Kenya", "number": "+254 722 178 177", "note": "Emotional support, 9am to 5pm"},
+    ],
+}
 
 
 def _hash(token: str) -> str:
@@ -45,7 +62,7 @@ def to_out(link: CheckinLink) -> CheckinOut:
 
 # ---------- counselor side ----------
 @router.post("/clients/{client_id}/checkins", response_model=CheckinCreated, status_code=201)
-def create_checkin(client_id: int, body: CheckinCreate, db: Session = Depends(get_db), me: Therapist = Depends(current_therapist)):
+def create_checkin(client_id: int, body: CheckinCreate, db: Session = Depends(get_db), me: Therapist = Depends(clinical_only)):
     client = owned_client(db, client_id, me)
     kinds = list(dict.fromkeys(body.kinds))
     unknown = [k for k in kinds if k not in MEASURES]
@@ -75,8 +92,9 @@ def list_checkins(client_id: int, db: Session = Depends(get_db), me: Therapist =
 @router.delete("/checkins/{checkin_id}", response_model=CheckinOut)
 def revoke_checkin(checkin_id: int, db: Session = Depends(get_db), me: Therapist = Depends(current_therapist)):
     link = db.get(CheckinLink, checkin_id)
-    if link is None or link.therapist_id != me.id:
+    if link is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Check-in not found")
+    owned_client(db, link.client_id, me)
     if status_of(link) == "pending":
         link.revoked_at = utcnow_naive()
         audit(db, me, "revoke", "checkin", link.id)
@@ -107,17 +125,18 @@ def public_get(token: str, request: Request, db: Session = Depends(get_db)):
     client = db.get(Client, link.client_id)
     counselor = db.get(Therapist, link.therapist_id)
     defs = {d["kind"]: d for d in public_definitions()}
-    measures = [
-        # Questions are shown to the client in their own voice.
-        defs[k] | {"prompt": "Over the last 2 weeks, how often have you been bothered by any of the following problems?"}
-        for k in link.kinds
-    ]
+    measures = [defs[k] | {"prompt": CLIENT_PROMPTS.get(k, defs[k]["prompt"])} for k in link.kinds]
+    org = db.get(Organization, client.organization_id) if client.organization_id else None
+    country = org.country if org else "KE"
+    contacts = (org.crisis_contacts if org and org.crisis_contacts else None) or DEFAULT_SUPPORT.get(country, [])
     return PublicCheckinOut(
         first_name=(client.preferred_name or client.full_name).split()[0],
         counselor_name=counselor.name,
-        practice_name=counselor.practice_name,
+        practice_name=(org.name if org and org.kind != "private_practice" else None) or counselor.practice_name,
         measures=measures,
         expires_at=link.expires_at,
+        country=country,
+        support_contacts=contacts,
     )
 
 

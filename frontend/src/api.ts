@@ -1,6 +1,7 @@
 import type {
-  Assessment, AuditRow, AuthConfig, Brief, Checkin, Client, ClientListItem, Dashboard, Draft, Goal, Letter, LetterKind,
-  LoginResult, Measure, PublicCheckin, Session, Therapist,
+  Assessment, AuditRow, AuthConfig, Brief, Checkin, Client, ClientListItem, CrisisContact, Dashboard, Draft, Goal, GroupSession,
+  Invite, Letter, LetterKind, LoginResult, Measure, Member, Org, OrgKind, Programme, PublicCheckin, Referral, Report, Role,
+  Session, SupervisionData, Therapist,
 } from "./types";
 
 // Empty in local dev (Vite proxies /api to the backend). On Netlify it's the Render URL.
@@ -54,8 +55,14 @@ async function req<T>(method: string, path: string, body?: unknown, opts: { auth
 export const api = {
   health: () => req<{ ok: boolean }>("GET", "/health", undefined, { auth: false }),
   authConfig: () => req<AuthConfig>("GET", "/auth/config", undefined, { auth: false }),
-  register: (b: { name: string; email: string; password: string }) =>
+  register: (b: { name: string; email: string; password: string; organization_name?: string; organization_kind?: OrgKind; country?: string }) =>
     req<{ token: string; therapist: Therapist }>("POST", "/auth/register", b, { auth: false }),
+  demoLogin: (role: "director" | "supervisor" | "counsellor" | "lay" | "me") =>
+    req<{ token: string; therapist: Therapist }>("POST", "/auth/demo", { role }, { auth: false }),
+  publicInvite: (token: string) =>
+    req<{ organization_name: string; email: string; name: string | null; role: Role }>("GET", `/public/invites/${encodeURIComponent(token)}`, undefined, { auth: false }),
+  acceptInvite: (token: string, b: { name: string; password: string }) =>
+    req<{ token: string; therapist: Therapist }>("POST", `/public/invites/${encodeURIComponent(token)}`, b, { auth: false }),
   login: (b: { email: string; password: string }) => req<LoginResult>("POST", "/auth/login", b, { auth: false }),
   loginMfa: (b: { mfa_token: string; code: string }) =>
     req<{ token: string; therapist: Therapist }>("POST", "/auth/login/mfa", b, { auth: false }),
@@ -74,7 +81,65 @@ export const api = {
   auditEvent: (b: { action: "print"; entity: "session" | "client" | "letter"; entity_id: number }) =>
     req<void>("POST", "/audit-events", b),
 
-  clients: () => req<ClientListItem[]>("GET", "/clients"),
+  org: () => req<Org>("GET", "/org"),
+  updateOrg: (b: Partial<Omit<Org, "crisis_contacts">> & { crisis_contacts?: CrisisContact[] }) => req<Org>("PATCH", "/org", b),
+  programmes: () => req<Programme[]>("GET", "/programmes"),
+  createProgramme: (b: Partial<Programme>) => req<Programme>("POST", "/programmes", b),
+  updateProgramme: (id: number, b: Partial<Programme>) => req<Programme>("PATCH", `/programmes/${id}`, b),
+  team: () => req<Member[]>("GET", "/team"),
+  updateMember: (id: number, b: { role?: Role; supervisor_id?: number; clear_supervisor?: boolean; active?: boolean }) =>
+    req<Member>("PATCH", `/team/${id}`, b),
+  transferCaseload: (from_id: number, to_id: number) => req<{ moved: number }>("POST", "/team/transfer", { from_id, to_id }),
+  invites: () => req<Invite[]>("GET", "/invites"),
+  createInvite: (b: { email: string; name?: string; role: Role; supervisor_id?: number | null; days?: number }) =>
+    req<Invite & { token: string }>("POST", "/invites", b),
+  revokeInvite: (id: number) => req<Invite>("DELETE", `/invites/${id}`),
+
+  supervision: () => req<SupervisionData>("GET", "/supervision"),
+  review: (id: number, decision: "approve" | "return", comment?: string) =>
+    req<Session>("POST", `/sessions/${id}/review`, { decision, comment }),
+  escalate: (clientId: number, note: string) => req<Client>("POST", `/clients/${clientId}/escalate`, { note }),
+  resolveEscalation: (clientId: number) => req<Client>("POST", `/clients/${clientId}/escalation/resolve`),
+
+  referrals: (openOnly = false) => req<Referral[]>("GET", `/referrals?open_only=${openOnly}`),
+  clientReferrals: (clientId: number) => req<Referral[]>("GET", `/clients/${clientId}/referrals`),
+  createReferral: (clientId: number, b: Partial<Referral>) => req<Referral>("POST", `/clients/${clientId}/referrals`, b),
+  updateReferral: (id: number, b: Partial<Referral>) => req<Referral>("PATCH", `/referrals/${id}`, b),
+
+  groups: () => req<GroupSession[]>("GET", "/groups"),
+  group: (id: number) => req<GroupSession>("GET", `/groups/${id}`),
+  createGroup: (b: Partial<GroupSession> & { held_at: string; title: string; facilitator_id?: number }) => req<GroupSession>("POST", "/groups", b),
+  updateGroup: (id: number, b: Partial<GroupSession>) => req<GroupSession>("PATCH", `/groups/${id}`, b),
+  deleteGroup: (id: number) => req<void>("DELETE", `/groups/${id}`),
+  setAttendance: (id: number, rows: { client_id: number; present: boolean; note?: string | null }[]) =>
+    req<GroupSession>("PUT", `/groups/${id}/attendance`, rows),
+  quickMember: (id: number, b: { full_name: string; gender?: string | null; date_of_birth?: string | null }) =>
+    req<ClientListItem>("POST", `/groups/${id}/members`, b),
+
+  report: (q: { start?: string; end?: string; programme_id?: number | ""; suppress?: boolean }) => {
+    const p = new URLSearchParams();
+    if (q.start) p.set("start", q.start);
+    if (q.end) p.set("end", q.end);
+    if (q.programme_id) p.set("programme_id", String(q.programme_id));
+    if (q.suppress === false) p.set("suppress", "false");
+    return req<Report>("GET", `/reports?${p}`);
+  },
+  reportCsv: async (q: { start?: string; end?: string; programme_id?: number | "" }) => {
+    const p = new URLSearchParams();
+    if (q.start) p.set("start", q.start);
+    if (q.end) p.set("end", q.end);
+    if (q.programme_id) p.set("programme_id", String(q.programme_id));
+    const res = await fetch(`${API_BASE}/api/reports.csv?${p}`, { headers: { Authorization: `Bearer ${getToken()}` } });
+    if (!res.ok) throw new ApiError(res.status, "Couldn't export the report.");
+    return res.blob();
+  },
+
+  clients: (q: { programme_id?: number; counsellor_id?: number } = {}) => {
+    const p = new URLSearchParams();
+    if (q.programme_id) p.set("programme_id", String(q.programme_id));
+    if (q.counsellor_id) p.set("counsellor_id", String(q.counsellor_id));
+    return req<ClientListItem[]>("GET", `/clients?${p}`);
+  },
   client: (id: number) => req<Client>("GET", `/clients/${id}`),
   createClient: (b: Partial<Client>) => req<Client>("POST", "/clients", b),
   updateClient: (id: number, b: Partial<Client>) => req<Client>("PATCH", `/clients/${id}`, b),

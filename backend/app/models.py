@@ -10,10 +10,50 @@ def utcnow() -> datetime:
     return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
+ROLES = ("owner", "admin", "supervisor", "counsellor", "lay_counsellor", "me_officer")
+ADMIN_ROLES = ("owner", "admin")
+CLINICAL_ROLES = ("owner", "admin", "supervisor", "counsellor", "lay_counsellor")
+
+
+class Organization(Base):
+    """An NGO, school, university, counselling centre or private practice. All data belongs to one."""
+
+    __tablename__ = "organizations"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(200))
+    kind: Mapped[str] = mapped_column(String(40), default="ngo")  # ngo | school | university | counselling_centre | private_practice | faith_based | government | other
+    country: Mapped[str] = mapped_column(String(2), default="KE")  # ISO 3166-1 alpha-2
+    review_all_notes: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    crisis_contacts: Mapped[list | None] = mapped_column(JSON)  # [{name, number, note}] shown to clients on check-ins
+    is_demo: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+
+class Programme(Base):
+    """A funded programme or service line, e.g. 'Schools wellbeing, Nairobi' or 'GBV psychosocial support, Kisumu'."""
+
+    __tablename__ = "programmes"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    organization_id: Mapped[int] = mapped_column(ForeignKey("organizations.id"), index=True)
+    name: Mapped[str] = mapped_column(String(200))
+    location: Mapped[str | None] = mapped_column(String(200))  # site, county, region or school
+    funder: Mapped[str | None] = mapped_column(String(200))
+    active: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+
 class Therapist(Base):
+    """A staff member of an organization (kept as 'therapists' for continuity with existing data)."""
+
     __tablename__ = "therapists"
 
     id: Mapped[int] = mapped_column(primary_key=True)
+    organization_id: Mapped[int | None] = mapped_column(ForeignKey("organizations.id"), index=True)
+    role: Mapped[str] = mapped_column(String(30), default="owner", server_default="owner")
+    supervisor_id: Mapped[int | None] = mapped_column(ForeignKey("therapists.id"))
+    active: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
     name: Mapped[str] = mapped_column(String(120))
     email: Mapped[str] = mapped_column(String(255), unique=True, index=True)
     password_hash: Mapped[str] = mapped_column(String(255))
@@ -41,7 +81,25 @@ class Client(Base):
     __tablename__ = "clients"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    therapist_id: Mapped[int] = mapped_column(ForeignKey("therapists.id"), index=True)
+    organization_id: Mapped[int | None] = mapped_column(ForeignKey("organizations.id"), index=True)
+    programme_id: Mapped[int | None] = mapped_column(ForeignKey("programmes.id"), index=True)
+    therapist_id: Mapped[int] = mapped_column(ForeignKey("therapists.id"), index=True)  # assigned counsellor
+
+    # Used only in de-identified reports (counts by gender, age band, location)
+    gender: Mapped[str | None] = mapped_column(String(20))  # female | male | other | undisclosed
+    location: Mapped[str | None] = mapped_column(String(120))  # county / district / school
+    referral_source: Mapped[str | None] = mapped_column(String(60))
+
+    # Minors and safeguarding
+    guardian_name: Mapped[str | None] = mapped_column(String(160))
+    guardian_phone: Mapped[str | None] = mapped_column(String(40))
+    guardian_consent: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    restricted: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")  # only counsellor + their supervisor
+
+    # Lay counsellor asks for clinical support
+    escalated_at: Mapped[datetime | None] = mapped_column(DateTime)
+    escalation_note: Mapped[str | None] = mapped_column(Text)
+    escalated_by_id: Mapped[int | None] = mapped_column(ForeignKey("therapists.id"))
 
     full_name: Mapped[str] = mapped_column(String(160))
     preferred_name: Mapped[str | None] = mapped_column(String(80))
@@ -90,8 +148,14 @@ class CounselingSession(Base):
     risk_check: Mapped[str | None] = mapped_column(Text)
     private_note: Mapped[str | None] = mapped_column(Text)  # counselor's own reflections, never exported
 
-    note_status: Mapped[str] = mapped_column(String(20), default="draft")  # draft | signed
+    note_status: Mapped[str] = mapped_column(String(20), default="draft")  # draft | submitted | signed
     signed_at: Mapped[datetime | None] = mapped_column(DateTime)
+
+    # Supervision: notes by lay counsellors (or all notes, if the organization says so) need co-signing
+    review_status: Mapped[str] = mapped_column(String(20), default="none", server_default="none")  # none | pending | approved | returned
+    review_comment: Mapped[str | None] = mapped_column(Text)
+    reviewed_by_id: Mapped[int | None] = mapped_column(ForeignKey("therapists.id"))
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime)
 
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)
@@ -177,10 +241,83 @@ class Letter(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)
 
 
+class Invite(Base):
+    __tablename__ = "invites"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    organization_id: Mapped[int] = mapped_column(ForeignKey("organizations.id"), index=True)
+    email: Mapped[str] = mapped_column(String(255))
+    name: Mapped[str | None] = mapped_column(String(120))
+    role: Mapped[str] = mapped_column(String(30))
+    supervisor_id: Mapped[int | None] = mapped_column(ForeignKey("therapists.id"))
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    expires_at: Mapped[datetime] = mapped_column(DateTime)
+    accepted_at: Mapped[datetime | None] = mapped_column(DateTime)
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime)
+    created_by_id: Mapped[int] = mapped_column(ForeignKey("therapists.id"))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+
+class Referral(Base):
+    __tablename__ = "referrals"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    organization_id: Mapped[int] = mapped_column(ForeignKey("organizations.id"), index=True)
+    client_id: Mapped[int] = mapped_column(ForeignKey("clients.id"), index=True)
+    created_by_id: Mapped[int] = mapped_column(ForeignKey("therapists.id"))
+    service: Mapped[str] = mapped_column(String(40))  # medical | psychiatric | legal | protection | gbv | education | economic | social | other
+    to_organisation: Mapped[str | None] = mapped_column(String(200))
+    to_contact: Mapped[str | None] = mapped_column(String(200))
+    reason: Mapped[str | None] = mapped_column(Text)
+    urgency: Mapped[str] = mapped_column(String(20), default="routine")  # routine | urgent | emergency
+    status: Mapped[str] = mapped_column(String(20), default="made")  # made | accepted | attended | not_attended | declined | closed
+    outcome: Mapped[str | None] = mapped_column(Text)
+    referred_on: Mapped[date] = mapped_column(Date)
+    follow_up_on: Mapped[date | None] = mapped_column(Date)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)
+
+
+class GroupSession(Base):
+    """A group session (school class, support group, psychoeducation) with an attendance register."""
+
+    __tablename__ = "group_sessions"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    organization_id: Mapped[int] = mapped_column(ForeignKey("organizations.id"), index=True)
+    programme_id: Mapped[int | None] = mapped_column(ForeignKey("programmes.id"), index=True)
+    facilitator_id: Mapped[int] = mapped_column(ForeignKey("therapists.id"), index=True)
+    title: Mapped[str] = mapped_column(String(200))
+    topic: Mapped[str | None] = mapped_column(String(200))
+    location: Mapped[str | None] = mapped_column(String(200))
+    held_at: Mapped[datetime] = mapped_column(DateTime, index=True)  # local wall-clock time
+    duration_min: Mapped[int] = mapped_column(Integer, default=60)
+    notes: Mapped[str | None] = mapped_column(Text)
+    status: Mapped[str] = mapped_column(String(20), default="held")  # scheduled | held | cancelled
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)
+
+    attendance: Mapped[list["GroupAttendance"]] = relationship(back_populates="group", cascade="all, delete-orphan")
+
+
+class GroupAttendance(Base):
+    __tablename__ = "group_attendance"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    group_id: Mapped[int] = mapped_column(ForeignKey("group_sessions.id"), index=True)
+    client_id: Mapped[int] = mapped_column(ForeignKey("clients.id"), index=True)
+    present: Mapped[bool] = mapped_column(Boolean, default=True)
+    note: Mapped[str | None] = mapped_column(Text)
+
+    group: Mapped[GroupSession] = relationship(back_populates="attendance")
+    client: Mapped["Client"] = relationship()
+
+
 class AuditLog(Base):
     __tablename__ = "audit_log"
 
     id: Mapped[int] = mapped_column(primary_key=True)
+    organization_id: Mapped[int | None] = mapped_column(ForeignKey("organizations.id"), index=True)
     therapist_id: Mapped[int] = mapped_column(ForeignKey("therapists.id"), index=True)
     action: Mapped[str] = mapped_column(String(40))
     entity: Mapped[str] = mapped_column(String(40))

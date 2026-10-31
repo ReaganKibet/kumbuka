@@ -13,11 +13,12 @@ import pyotp
 from cryptography.fernet import Fernet, InvalidToken
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from sqlalchemy import false, not_, or_, select
 from sqlalchemy.orm import Session
 
 from .config import settings
 from .db import get_db
-from .models import AuditLog, Client, Therapist
+from .models import ADMIN_ROLES, CLINICAL_ROLES, AuditLog, Client, Organization, Therapist
 
 _ITERATIONS = 390_000
 _bearer = HTTPBearer(auto_error=False)
@@ -70,7 +71,7 @@ def decode_token(token: str, typ: str, db: Session) -> Therapist | None:
         therapist = db.get(Therapist, int(payload["sub"]))
     except (jwt.PyJWTError, KeyError, ValueError):
         return None
-    if therapist is None or payload.get("tv") != therapist.token_version:
+    if therapist is None or payload.get("tv") != therapist.token_version or not therapist.active:
         return None
     return therapist
 
@@ -210,14 +211,74 @@ def record_success(therapist: Therapist):
     therapist.locked_until = None
 
 
-# ---------- ownership + audit ----------
-def owned_client(db: Session, client_id: int, therapist: Therapist) -> Client:
-    """Every client lookup goes through here so one counselor can never reach another's records."""
-    client = db.get(Client, client_id)
-    if client is None or client.therapist_id != therapist.id:
+# ---------- roles, scope and audit ----------
+def is_admin(u: Therapist) -> bool:
+    return u.role in ADMIN_ROLES
+
+
+def require_roles(*roles: str):
+    """Dependency: only these roles may call the endpoint."""
+
+    def dep(me: Therapist = Depends(current_therapist)) -> Therapist:
+        if me.role not in roles:
+            raise HTTPException(status.HTTP_403_FORBIDDEN, "Your role doesn't allow this.")
+        return me
+
+    return dep
+
+
+clinical_only = require_roles(*CLINICAL_ROLES)
+admins_only = require_roles(*ADMIN_ROLES)
+reports_access = require_roles("owner", "admin", "supervisor", "me_officer")
+
+
+def team_ids(db: Session, me: Therapist) -> list[int]:
+    """Me plus everyone I supervise (directly)."""
+    ids = db.scalars(
+        select(Therapist.id).where(Therapist.organization_id == me.organization_id, Therapist.supervisor_id == me.id)
+    ).all()
+    return [me.id, *ids]
+
+
+def client_scope(db: Session, me: Therapist):
+    """SQL condition for the clients this person may open.
+
+    - Admins: everyone in the organization except restricted cases they aren't involved in.
+    - Supervisors: their own clients and their supervisees' clients.
+    - Counsellors and lay counsellors: their own clients.
+    - M&E officers: no individual records (they see de-identified reports only).
+    """
+    in_org = Client.organization_id == me.organization_id
+    if me.role in ADMIN_ROLES:
+        return in_org & or_(not_(Client.restricted), Client.therapist_id.in_(team_ids(db, me)))
+    if me.role == "supervisor":
+        return in_org & Client.therapist_id.in_(team_ids(db, me))
+    if me.role in ("counsellor", "lay_counsellor"):
+        return in_org & (Client.therapist_id == me.id)
+    return false()
+
+
+def owned_client(db: Session, client_id: int, me: Therapist) -> Client:
+    """Every client lookup goes through here so nobody reaches records outside their scope."""
+    client = db.scalar(select(Client).where(Client.id == client_id, client_scope(db, me)))
+    if client is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Client not found")
     return client
 
 
+def can_supervise(db: Session, me: Therapist, author_id: int) -> bool:
+    if author_id == me.id:
+        return False
+    author = db.get(Therapist, author_id)
+    if author is None or author.organization_id != me.organization_id:
+        return False
+    return is_admin(me) or author.supervisor_id == me.id
+
+
+def org_of(db: Session, me: Therapist) -> Organization:
+    return db.get(Organization, me.organization_id)
+
+
 def audit(db: Session, therapist: Therapist, action: str, entity: str, entity_id: int | None = None, detail: str | None = None):
-    db.add(AuditLog(therapist_id=therapist.id, action=action, entity=entity, entity_id=entity_id, detail=detail))
+    db.add(AuditLog(organization_id=therapist.organization_id, therapist_id=therapist.id, action=action,
+                    entity=entity, entity_id=entity_id, detail=detail))

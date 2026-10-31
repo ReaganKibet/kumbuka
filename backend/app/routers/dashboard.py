@@ -8,7 +8,7 @@ from ..config import local_now, settings
 from ..db import get_db
 from ..models import Assessment, AuditLog, CheckinLink, Client, CounselingSession, Therapist
 from ..schemas import AuditOut, DashboardOut, SessionOut, SessionWithClient
-from ..security import current_therapist
+from ..security import client_scope, current_therapist, is_admin, team_ids
 
 router = APIRouter(tags=["dashboard"])
 
@@ -46,14 +46,16 @@ def dashboard(db: Session = Depends(get_db), me: Therapist = Depends(current_the
     ).all()
 
     attention: list[dict] = []
+    scope = client_scope(db, me)
     for c in db.scalars(
-        select(Client).where(Client.therapist_id == me.id, Client.status == "active", Client.risk_level.in_(["medium", "high"]))
+        select(Client).where(scope, Client.status == "active", Client.risk_level.in_(["medium", "high"]))
     ).all():
         attention.append({"client_id": c.id, "client_name": c.preferred_name or c.full_name,
                           "reason": f"Risk level: {c.risk_level}", "level": c.risk_level})
     recent_flagged = db.scalars(
         select(Assessment)
-        .where(Assessment.therapist_id == me.id, Assessment.taken_at >= now - timedelta(days=14))
+        .join(Client, Client.id == Assessment.client_id)
+        .where(scope, Assessment.taken_at >= now - timedelta(days=14))
         .order_by(Assessment.taken_at.desc())
     ).all()
     seen = set()
@@ -76,7 +78,8 @@ def dashboard(db: Session = Depends(get_db), me: Therapist = Depends(current_the
     checkins = []
     for link in db.scalars(
         select(CheckinLink)
-        .where(CheckinLink.therapist_id == me.id, CheckinLink.completed_at >= week_ago_utc)
+        .join(Client, Client.id == CheckinLink.client_id)
+        .where(scope, CheckinLink.completed_at >= week_ago_utc)
         .order_by(CheckinLink.completed_at.desc())
     ).all():
         c = db.get(Client, link.client_id)
@@ -93,13 +96,29 @@ def dashboard(db: Session = Depends(get_db), me: Therapist = Depends(current_the
         })
 
     counts = {
-        "active_clients": db.scalar(select(func.count(Client.id)).where(Client.therapist_id == me.id, Client.status == "active")) or 0,
+        "active_clients": db.scalar(select(func.count(Client.id)).where(scope, Client.status == "active")) or 0,
         "sessions_this_month": db.scalar(
             select(func.count(S.id)).where(
                 S.therapist_id == me.id, S.status == "attended", S.scheduled_at >= day_start.replace(day=1)
             )
         ) or 0,
     }
+
+    supervision = None
+    if is_admin(me) or me.role == "supervisor":
+        team = team_ids(db, me)
+        pending = db.scalar(
+            select(func.count(S.id)).join(Client, Client.id == S.client_id).where(
+                scope, S.note_status == "submitted", S.therapist_id != me.id,
+                *([] if is_admin(me) else [S.therapist_id.in_(team)]),
+            )
+        ) or 0
+        escalated = db.scalar(select(func.count(Client.id)).where(scope, Client.escalated_at.is_not(None))) or 0
+        supervision = {"pending_reviews": pending, "escalations": escalated}
+    returned = db.scalar(
+        select(func.count(S.id)).where(S.therapist_id == me.id, S.review_status == "returned", S.note_status == "draft")
+    ) or 0
+    counts["returned_notes"] = returned
 
     return DashboardOut(
         today=_with_client(today),
@@ -109,11 +128,19 @@ def dashboard(db: Session = Depends(get_db), me: Therapist = Depends(current_the
         checkins=checkins,
         counts=counts,
         ai_enabled=settings.ai_enabled,
+        supervision=supervision,
     )
 
 
 @router.get("/audit", response_model=list[AuditOut])
 def audit_log(db: Session = Depends(get_db), me: Therapist = Depends(current_therapist)):
-    return db.scalars(
-        select(AuditLog).where(AuditLog.therapist_id == me.id).order_by(AuditLog.at.desc()).limit(300)
-    ).all()
+    """Admins see the whole organization's log; everyone else sees their own actions."""
+    q = select(AuditLog, Therapist.name).join(Therapist, Therapist.id == AuditLog.therapist_id)
+    q = q.where(AuditLog.organization_id == me.organization_id) if is_admin(me) else q.where(AuditLog.therapist_id == me.id)
+    rows = db.execute(q.order_by(AuditLog.at.desc()).limit(400)).all()
+    out = []
+    for row, name in rows:
+        o = AuditOut.model_validate(row)
+        o.actor_name = name
+        out.append(o)
+    return out

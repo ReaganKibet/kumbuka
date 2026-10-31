@@ -18,15 +18,25 @@ import Settings from "./pages/Settings";
 import CheckIn from "./pages/CheckIn";
 import LetterEditor from "./pages/LetterEditor";
 import { PrintClient, PrintLetter, PrintSession } from "./pages/PrintPages";
+import Landing from "./pages/Landing";
+import Join from "./pages/Join";
+import Team from "./pages/Team";
+import Supervision from "./pages/Supervision";
+import Referrals from "./pages/Referrals";
+import Reports from "./pages/Reports";
+import { GroupDetail, GroupsList } from "./pages/Groups";
 
 function Protected({ children }: { children: ReactNode }) {
   const { me, ready } = useAuth();
   if (!ready) return <Loading />;
-  if (!me) return <Navigate to="/login" replace />;
+  // Visitors to the home page see the landing page; deep links go to sign-in.
+  if (!me) return <Navigate to={window.location.pathname === "/" ? "/welcome" : "/login"} replace />;
   return <>{children}</>;
 }
 
 const router = createBrowserRouter([
+  { path: "/welcome", element: <Landing /> },
+  { path: "/join/:token", element: <Join /> },
   { path: "/login", element: <Login /> },
   { path: "/checkin/:token", element: <CheckIn /> },
   { path: "/print/session/:id", element: <Protected><PrintSession /></Protected> },
@@ -40,6 +50,12 @@ const router = createBrowserRouter([
       { path: "clients/:id", element: <ClientPage /> },
       { path: "sessions/:id", element: <SessionNote /> },
       { path: "letters/:id", element: <LetterEditor /> },
+      { path: "groups", element: <GroupsList /> },
+      { path: "groups/:id", element: <GroupDetail /> },
+      { path: "referrals", element: <Referrals /> },
+      { path: "supervision", element: <Supervision /> },
+      { path: "reports", element: <Reports /> },
+      { path: "team", element: <Team /> },
       { path: "activity", element: <Activity /> },
       { path: "settings", element: <Settings /> },
     ],

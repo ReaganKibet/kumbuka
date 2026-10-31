@@ -1,17 +1,9 @@
 import { useEffect, useState } from "react";
 import { api } from "../../api";
 import { useAuth } from "../../auth";
+import { waNumber } from "../../lib/africa";
 import type { Checkin, Client } from "../../types";
 import { ErrorText, Field, fmtDate, Modal, StatusTag } from "../ui";
-
-/** 07xx / 01xx / +254 / 254 → 2547xx… for wa.me links. */
-export function waNumber(phone: string | null): string | null {
-  if (!phone) return null;
-  let d = phone.replace(/\D/g, "");
-  if (d.startsWith("0") && d.length === 10) d = "254" + d.slice(1);
-  if ((d.startsWith("7") || d.startsWith("1")) && d.length === 9) d = "254" + d;
-  return d.length >= 11 ? d : null;
-}
 
 const STATUS: Record<Checkin["status"], { label: string; tone: "muted" | "flag" | "pine" | "risk" }> = {
   pending: { label: "Waiting for the client", tone: "flag" },
@@ -42,7 +34,7 @@ export default function CheckinPanel({ client }: { client: Client }) {
     try {
       const r = await api.createCheckin(client.id, { kinds, days });
       const url = `${window.location.origin}/checkin/${r.token}`;
-      const by = me?.name.split(" ")[0] ?? "your counselor";
+      const by = me?.name.split(" ")[0] ?? "your counsellor";
       setCreated({ url, expires: r.expires_at });
       setMessage(
         `Hi ${first}, it's ${by}. Before we next meet, please answer a few short questions here. It takes about 3 minutes:\n${url}\n` +
@@ -64,7 +56,7 @@ export default function CheckinPanel({ client }: { client: Client }) {
 
   function close() { setOpen(false); setCreated(null); setCopied(false); setError(null); }
 
-  const wa = waNumber(client.phone);
+  const wa = waNumber(client.phone, me?.organization?.country ?? "KE");
   const pending = links.filter((l) => l.status === "pending");
   const recent = links.slice(0, 5);
 
@@ -101,13 +93,13 @@ export default function CheckinPanel({ client }: { client: Client }) {
           <div className="space-y-5">
             <fieldset>
               <legend className="mb-2 text-sm font-bold">Questionnaires</legend>
-              {["PHQ-9", "GAD-7"].map((k) => (
+              {["PHQ-9", "GAD-7", "WHO-5"].map((k) => (
                 <label key={k} className="flex items-center gap-2.5 py-1">
                   <input
                     type="checkbox" className="size-4 accent-pine" checked={kinds.includes(k)}
                     onChange={(e) => setKinds(e.target.checked ? [...kinds, k] : kinds.filter((x) => x !== k))}
                   />
-                  {k === "PHQ-9" ? "PHQ-9 (low mood)" : "GAD-7 (anxiety)"}
+                  {k === "PHQ-9" ? "PHQ-9 (low mood)" : k === "GAD-7" ? "GAD-7 (anxiety)" : "WHO-5 (wellbeing, good for schools and groups)"}
                 </label>
               ))}
               <p className="mt-1 text-xs text-muted">The client can also rate their mood and leave you a short message.</p>
@@ -124,7 +116,7 @@ export default function CheckinPanel({ client }: { client: Client }) {
           </div>
         ) : (
           <div className="space-y-4">
-            <p className="text-sm">Edit the message if you like, then send it. For privacy it doesn't mention counseling.</p>
+            <p className="text-sm">Edit the message if you like, then send it. For privacy it doesn't mention counselling.</p>
             <textarea className="field" rows={5} value={message} onChange={(e) => { setMessage(e.target.value); setCopied(false); }} aria-label="Message" />
             <div className="flex flex-wrap gap-2">
               {wa ? (

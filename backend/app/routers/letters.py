@@ -118,8 +118,9 @@ def create_letter(client_id: int, body: LetterIn, db: Session = Depends(get_db),
 
 def _owned_letter(db: Session, letter_id: int, me: Therapist) -> Letter:
     letter = db.get(Letter, letter_id)
-    if letter is None or letter.therapist_id != me.id:
+    if letter is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Letter not found")
+    owned_client(db, letter.client_id, me)
     return letter
 
 

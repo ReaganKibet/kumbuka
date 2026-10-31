@@ -35,6 +35,8 @@ class Settings:
     registration: str = os.getenv("ALLOW_REGISTRATION", "first").strip().lower()
     docs_enabled: bool = _bool("ENABLE_API_DOCS", not production)
     checkin_default_days: int = int(os.getenv("CHECKIN_DAYS", "3"))
+    # Public one-click demo organization (fictional data) for investors and partners
+    demo_enabled: bool = _bool("DEMO_ENABLED", False)
 
     @property
     def ai_enabled(self) -> bool:

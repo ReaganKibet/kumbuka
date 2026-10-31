@@ -1,16 +1,9 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { useParams } from "react-router-dom";
 import { api } from "../api";
-import type { PublicCheckin } from "../types";
+import type { CrisisContact, PublicCheckin } from "../types";
 
-// Shown to clients. Check these numbers periodically; last verified October 2026.
-const SUPPORT_LINES = [
-  { name: "Emergency services", number: "999", alt: "or 112", tel: "999", note: "If you are in danger right now" },
-  { name: "Kenya Red Cross", number: "1199", tel: "1199", note: "Free call" },
-  { name: "Befrienders Kenya", number: "+254 722 178 177", tel: "+254722178177", note: "Emotional support, 9am to 5pm" },
-];
-
-function SupportBox({ counselor, strong }: { counselor: string; strong: boolean }) {
+function SupportBox({ counselor, strong, lines }: { counselor: string; strong: boolean; lines: CrisisContact[] }) {
   return (
     <section className={`rounded-xl p-5 ${strong ? "bg-risk-soft ring-1 ring-risk/30" : "bg-paper ring-1 ring-line"}`}>
       <h2 className="font-serif text-xl">{strong ? "You don't have to wait until your session" : "If you need to talk to someone sooner"}</h2>
@@ -20,19 +13,23 @@ function SupportBox({ counselor, strong }: { counselor: string; strong: boolean 
           feel strong, please reach out now.
         </p>
       )}
-      <ul className="mt-4 space-y-3">
-        {SUPPORT_LINES.map((l) => (
-          <li key={l.name}>
-            <a href={`tel:${l.tel}`} className="flex items-baseline justify-between gap-3 rounded-lg bg-paper px-4 py-3 ring-1 ring-line">
-              <span>
-                <span className="block font-bold">{l.name}</span>
-                <span className="text-sm text-muted">{l.note}</span>
-              </span>
-              <span className="whitespace-nowrap font-bold text-pine">{l.number}{l.alt ? <span className="font-normal text-muted"> {l.alt}</span> : null}</span>
-            </a>
-          </li>
-        ))}
-      </ul>
+      {lines.length > 0 ? (
+        <ul className="mt-4 space-y-3">
+          {lines.map((l) => (
+            <li key={l.name + l.number}>
+              <a href={`tel:${l.number.replace(/[^\d+]/g, "")}`} className="flex items-baseline justify-between gap-3 rounded-lg bg-paper px-4 py-3 ring-1 ring-line">
+                <span>
+                  <span className="block font-bold">{l.name}</span>
+                  {l.note && <span className="text-sm text-muted">{l.note}</span>}
+                </span>
+                <span className="whitespace-nowrap font-bold text-pine">{l.number}</span>
+              </a>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="mt-3">Contact {counselor} directly, or your local emergency services if you are in danger right now.</p>
+      )}
     </section>
   );
 }
@@ -89,7 +86,7 @@ export default function CheckIn() {
     return shell(
       <div className="pt-16">
         <p className="font-serif text-3xl">{gone}</p>
-        <p className="mt-6 text-sm text-muted">If you are in danger right now, call 999 or 112.</p>
+        <p className="mt-6 text-sm text-muted">If you are in danger right now, contact your local emergency services.</p>
       </div>,
     );
   }
@@ -104,7 +101,7 @@ export default function CheckIn() {
           <h1 className="font-serif text-4xl">Thank you, {data.first_name}.</h1>
           <p className="mt-3 text-lg">Your answers have been sent to {data.counselor_name}. You can close this page.</p>
         </div>
-        <SupportBox counselor={counselorFirst} strong={done.show_support} />
+        <SupportBox counselor={counselorFirst} strong={done.show_support} lines={data.support_contacts} />
       </div>,
     );
   }
@@ -179,7 +176,9 @@ export default function CheckIn() {
         </label>
       </section>
 
-      <p className="mb-6 text-sm text-muted">If you are in danger right now, call 999 or 112.</p>
+      <p className="mb-6 text-sm text-muted">
+        If you are in danger right now, {data.country === "KE" ? "call 999 or 112" : "contact your local emergency services"}.
+      </p>
 
       <div className="fixed inset-x-0 bottom-0 border-t border-line bg-paper/95 px-4 py-3 backdrop-blur">
         <div className="mx-auto flex max-w-xl items-center justify-between gap-3">

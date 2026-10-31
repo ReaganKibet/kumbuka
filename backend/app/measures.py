@@ -2,7 +2,12 @@
 
 PHQ-9 and GAD-7 were developed by Drs. Spitzer, Williams, Kroenke and colleagues with an
 educational grant from Pfizer; no permission is required to reproduce, translate, display
-or distribute them.
+or distribute them. The WHO-5 Well-Being Index is free to use (Psychiatric Research Unit,
+Mental Health Centre North Zealand).
+
+Each measure declares how to tell "improvement" for funder reports:
+- improve_by: change in total that counts as reliable improvement
+- cutoff: the clinical threshold; "recovered" means crossing it in the healthy direction
 """
 
 FREQUENCY_OPTIONS = [
@@ -30,6 +35,9 @@ MEASURES: dict[str, dict] = {
         ],
         "options": FREQUENCY_OPTIONS,
         "max": 27,
+        "higher_is_better": False,
+        "improve_by": 5,
+        "cutoff": 10,
         "bands": [(4, "Minimal"), (9, "Mild"), (14, "Moderate"), (19, "Moderately severe"), (27, "Severe")],
     },
     "GAD-7": {
@@ -47,7 +55,36 @@ MEASURES: dict[str, dict] = {
         ],
         "options": FREQUENCY_OPTIONS,
         "max": 21,
+        "higher_is_better": False,
+        "improve_by": 4,
+        "cutoff": 10,
         "bands": [(4, "Minimal"), (9, "Mild"), (14, "Moderate"), (21, "Severe")],
+    },
+    "WHO-5": {
+        "kind": "WHO-5",
+        "title": "WHO-5 (Wellbeing)",
+        "prompt": "Over the last two weeks, how much of the time has the client felt the following?",
+        "items": [
+            "I have felt cheerful and in good spirits",
+            "I have felt calm and relaxed",
+            "I have felt active and vigorous",
+            "I woke up feeling fresh and rested",
+            "My daily life has been filled with things that interest me",
+        ],
+        "options": [
+            {"value": 0, "label": "At no time"},
+            {"value": 1, "label": "Some of the time"},
+            {"value": 2, "label": "Less than half of the time"},
+            {"value": 3, "label": "More than half of the time"},
+            {"value": 4, "label": "Most of the time"},
+            {"value": 5, "label": "All of the time"},
+        ],
+        "multiplier": 4,  # raw 0-25 is reported as a 0-100 percentage score
+        "max": 100,
+        "higher_is_better": True,
+        "improve_by": 10,
+        "cutoff": 50,
+        "bands": [(28, "Low (screen for depression)"), (50, "Poor wellbeing"), (100, "Good wellbeing")],
     },
 }
 
@@ -63,10 +100,11 @@ def score(kind: str, answers: list[int]) -> dict:
     n = len(measure["items"])
     if len(answers) != n:
         raise MeasureError(f"{kind} needs exactly {n} answers, got {len(answers)}")
-    if any((not isinstance(a, int)) or a < 0 or a > 3 for a in answers):
-        raise MeasureError("Each answer must be a whole number from 0 to 3")
+    top = max(o["value"] for o in measure["options"])
+    if any((not isinstance(a, int)) or a < 0 or a > top for a in answers):
+        raise MeasureError(f"Each answer must be a whole number from 0 to {top}")
 
-    total = sum(answers)
+    total = sum(answers) * measure.get("multiplier", 1)
     severity = next(label for upper, label in measure["bands"] if total <= upper)
 
     flags: list[str] = []
@@ -76,12 +114,15 @@ def score(kind: str, answers: list[int]) -> dict:
         flags.append("Severe range. Consider whether a referral or closer follow-up is needed.")
     if kind == "GAD-7" and total >= 15:
         flags.append("Severe range. Consider whether a referral or closer follow-up is needed.")
+    if kind == "WHO-5" and total <= 28:
+        flags.append("Very low wellbeing. Screen for depression (e.g. PHQ-9).")
 
     return {"total": total, "severity": severity, "flags": flags}
 
 
 def public_definitions() -> list[dict]:
     return [
-        {k: v for k, v in m.items() if k != "bands"} | {"bands": [{"upTo": u, "label": l} for u, l in m["bands"]]}
+        {k: v for k, v in m.items() if k not in ("bands", "multiplier")}
+        | {"bands": [{"upTo": u, "label": l} for u, l in m["bands"]]}
         for m in MEASURES.values()
     ]

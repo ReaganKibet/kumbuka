@@ -1,7 +1,7 @@
 """AI helpers: turn dictation into a DAP draft, and write a pre-session brief.
 
 Design rules:
-- AI only ever produces drafts. Nothing is saved until the counselor reviews and saves it.
+- AI only ever produces drafts. Nothing is saved until the counsellor reviews and saves it.
 - No names or contact details are sent to the model; it only sees "the client".
 - Without an API key everything still works with simple non-AI fallbacks.
 """
@@ -13,28 +13,29 @@ from .config import settings
 
 log = logging.getLogger("kumbuka.ai")
 
-NOTE_SYSTEM = """You are a clinical documentation assistant for a counselor. You turn the counselor's \
-spoken or typed rough notes from a counseling session into a concise, professional DAP note.
+NOTE_SYSTEM = """You are a clinical documentation assistant for a counsellor. You turn the counsellor's \
+spoken or typed rough notes from a counselling session into a concise, professional DAP note.
 
 Rules:
-- Use ONLY information present in the counselor's notes. Never invent details, quotes, history, \
+- Use ONLY information present in the counsellor's notes. Never invent details, quotes, history, \
 diagnoses, scores or plans. If a section has no information, return an empty string for it.
-- Write in professional third person ("Client reported...", "Counselor observed..."). Refer to the \
+- Write in professional third person ("Client reported...", "Counsellor observed..."). Refer to the \
 person only as "Client"; never use names.
-- data: what the client reported and what the counselor observed (mood, affect, presentation).
-- assessment: the counselor's own interpretation of progress, themes and response to the session, \
+- data: what the client reported and what the counsellor observed (mood, affect, presentation).
+- assessment: the counsellor's own interpretation of progress, themes and response to the session, \
 as stated or clearly implied in the notes. Do not add your own clinical judgement.
 - plan: next steps, next session focus, referrals, as stated.
-- interventions: techniques or approaches the counselor used in this session.
+- interventions: techniques or approaches the counsellor used in this session.
 - homework: anything the client agreed to do before the next session.
 - risk_indicators: list every mention of suicidal thoughts, self-harm, harm to others, abuse or \
 safeguarding concerns, or a substance-use crisis, each as a short factual phrase. Include risk that \
 was explicitly denied too (e.g. "Client denied suicidal ideation"). Empty list if none mentioned.
-- Keep each section brief: plain sentences, no headings or bullet symbols."""
+- Keep each section brief: plain sentences, no headings or bullet symbols.
+- Use British English spelling (counselling, behaviour, programme)."""
 
 NOTE_TOOL = {
     "name": "record_dap_note",
-    "description": "Record the structured DAP session note drafted from the counselor's notes.",
+    "description": "Record the structured DAP session note drafted from the counsellor's notes.",
     "input_schema": {
         "type": "object",
         "properties": {
@@ -49,14 +50,14 @@ NOTE_TOOL = {
     },
 }
 
-BRIEF_SYSTEM = """You prepare a short pre-session brief for a counselor about one of their clients, \
+BRIEF_SYSTEM = """You prepare a short pre-session brief for a counsellor about one of their clients, \
 using only the records provided. Write 3 to 6 short sentences of plain prose, no headings or bullets. \
 Cover: the main themes being worked on, what happened last session and the agreed homework, how \
-questionnaire scores are trending (if any), and anything the counselor should check on today, \
+questionnaire scores are trending (if any), and anything the counsellor should check on today, \
 especially any risk notes or flags. Never invent information or add clinical advice beyond the \
 records. Refer to the person as "the client"."""
 
-LETTER_SYSTEM = """You draft the body of a referral letter from a counselor to another professional, \
+LETTER_SYSTEM = """You draft the body of a referral letter from a counsellor to another professional, \
 using only the records provided. Write 2 to 4 short paragraphs of plain prose: who is being referred \
 and why, the presenting concern and a brief, factual summary of the work so far, and any current risk \
 the receiving professional needs to know about. Refer to the person only as "[Client]" (exactly that, \
@@ -106,7 +107,7 @@ def draft_note(dictation: str) -> dict:
             system=NOTE_SYSTEM,
             tools=[NOTE_TOOL],
             tool_choice={"type": "tool", "name": NOTE_TOOL["name"]},
-            messages=[{"role": "user", "content": f"Counselor's notes from today's session:\n\n{dictation}"}],
+            messages=[{"role": "user", "content": f"Counsellor's notes from today's session:\n\n{dictation}"}],
         )
         block = next(b for b in resp.content if b.type == "tool_use")
         out = {k: block.input.get(k, "" if k != "risk_indicators" else []) for k in NOTE_TOOL["input_schema"]["required"]}

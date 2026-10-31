@@ -26,7 +26,9 @@ services:
         value: claude-sonnet-5-5
       - key: APP_TIMEZONE
         value: Africa/Nairobi
-      - key: ALLOW_REGISTRATION  # "first" = only the first account can sign up
-        value: first
+      - key: ALLOW_REGISTRATION  # "true" = any organisation can sign up (each one's data is isolated)
+        value: "true"
+      - key: DEMO_ENABLED        # one-click fictional demo organisation for investors and partners
+        value: "true"
       - key: IDLE_LOCK_MINUTES
         value: "15"

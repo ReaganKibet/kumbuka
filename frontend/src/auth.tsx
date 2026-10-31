@@ -8,7 +8,7 @@ type AuthState = {
   config: AuthConfig | null;
   ready: boolean;
   signIn: (token: string, me: Therapist) => void;
-  signOut: (reason?: "locked" | "manual") => void;
+  signOut: (reason?: "locked" | "manual" | "demo") => void;
 };
 
 const Ctx = createContext<AuthState | null>(null);
@@ -28,12 +28,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     api.me().then(setMe).catch(() => setToken(null)).finally(() => setReady(true));
   }, []);
 
-  const signOut = useCallback((reason: "locked" | "manual" = "manual") => {
+  const signOut = useCallback((reason: "locked" | "manual" | "demo" = "manual") => {
+    const wasDemo = !!me?.organization?.is_demo;
     setToken(null);
     setMe(null);
     // Full reload clears every bit of client data held in memory.
-    window.location.assign(reason === "locked" ? "/login?locked=1" : "/login");
-  }, []);
+    window.location.assign(
+      reason === "locked" ? "/login?locked=1" : reason === "demo" || wasDemo ? "/welcome#demo" : "/login",
+    );
+  }, [me]);
 
   const value: AuthState = {
     me,

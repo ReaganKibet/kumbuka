@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useBlocker, useNavigate, useParams } from "react-router-dom";
 import { api } from "../api";
-import { LOCK_EVENT } from "../auth";
+import { LOCK_EVENT, useAuth } from "../auth";
+import { isSupervisor } from "../lib/roles";
 import { useDictation } from "../components/useDictation";
 import { ErrorText, Field, fmtDate, Loading, Modal, StatusTag } from "../components/ui";
 import type { Client, Draft, Session } from "../types";
@@ -28,6 +29,7 @@ function toForm(s: Session): Form {
 export default function SessionNote() {
   const id = Number(useParams().id);
   const nav = useNavigate();
+  const { me } = useAuth();
   const [session, setSession] = useState<Session | null>(null);
   const [client, setClient] = useState<Client | null>(null);
   const [form, setForm] = useState<Form | null>(null);
@@ -80,13 +82,17 @@ export default function SessionNote() {
   if (!session || !form) return <Loading />;
 
   const signed = session.note_status === "signed";
+  const readOnly = !session.can_edit; // signed, waiting for review, or someone else's note
+  const isAuthor = session.author_id === me?.id;
+  const needsReview = !!me && me.role !== "owner" && me.role !== "admin" &&
+    (me.role === "lay_counsellor" || !!me.organization?.review_all_notes);
   const name = client ? client.preferred_name || client.full_name : "";
 
   async function save(): Promise<Session | null> {
     if (!form) return null;
     setSaving(true); setError(null);
     try {
-      const body: Partial<Session> = signed
+      const body: Partial<Session> = readOnly
         ? { private_note: form.private_note || null }
         : {
             status: form.status, mood_rating: form.mood_rating, dictation: form.dictation || null,
@@ -149,22 +155,42 @@ export default function SessionNote() {
           <h1 className="font-serif text-4xl tracking-tight">Session with {name}</h1>
           <p className="mt-1 flex flex-wrap items-center gap-3 text-muted">
             <span>{fmtDate(session.scheduled_at, true)}, {session.duration_min} min</span>
-            {signed ? <StatusTag tone="pine">Signed {fmtDate(session.signed_at)}</StatusTag> : <StatusTag tone="flag">Draft</StatusTag>}
+            {signed ? (
+              <StatusTag tone="pine">
+                Signed {fmtDate(session.signed_at)}{session.review_status === "approved" && session.reviewer_name ? `, co-signed by ${session.reviewer_name}` : ""}
+              </StatusTag>
+            ) : session.note_status === "submitted" ? (
+              <StatusTag tone="flag">Waiting for supervisor review</StatusTag>
+            ) : <StatusTag tone="flag">Draft</StatusTag>}
+            {!isAuthor && session.author_name && <span>Written by {session.author_name}</span>}
           </p>
         </div>
-        {!signed ? (
+        {!readOnly ? (
           <div className="flex flex-wrap gap-2">
             <button className="btn btn-quiet" onClick={save} disabled={saving || !dirty}>{saving ? "Saving…" : dirty ? "Save draft" : "Saved"}</button>
-            <button className="btn btn-primary" onClick={() => setConfirmSign(true)}>Sign note</button>
+            <button className="btn btn-primary" onClick={() => setConfirmSign(true)}>{needsReview ? "Submit for review" : "Sign note"}</button>
           </div>
-        ) : (
+        ) : signed ? (
           <Link className="btn btn-quiet" to={`/print/session/${id}`}>Print or save as PDF</Link>
-        )}
+        ) : null}
       </header>
 
       <ErrorText error={error} />
 
-      {signed ? (
+      {session.review_status === "returned" && session.note_status === "draft" && session.review_comment && (
+        <div className="mb-6 rounded-lg border-l-4 border-flag bg-flag-soft px-4 py-3">
+          <p className="font-bold text-flag">Returned by {session.reviewer_name ?? "your supervisor"}</p>
+          <p className="note-text mt-0.5 whitespace-pre-wrap">{session.review_comment}</p>
+        </div>
+      )}
+      {signed && session.review_comment && (
+        <div className="mb-6 rounded-lg bg-sage px-4 py-3 text-sm">
+          <span className="font-bold">Supervisor's comment:</span> {session.review_comment}
+        </div>
+      )}
+      {session.can_review && <ReviewPanel sessionId={id} onDone={setSession} />}
+
+      {readOnly ? (
         <div className="grid gap-10 lg:grid-cols-[3fr_2fr]">
           <article className="rounded-lg bg-paper p-6 ring-1 ring-line">
             {session.mood_rating && <p className="mb-4 text-sm text-muted">Client's mood: {session.mood_rating}/10</p>}
@@ -186,13 +212,18 @@ export default function SessionNote() {
             )}
           </article>
           <aside className="space-y-8">
-            <section>
-              <h2 className="font-bold">Add an addendum</h2>
-              <p className="text-sm text-muted">Signed notes can't be edited. Add corrections or later information here.</p>
-              <textarea className="field note-text mt-2" rows={4} value={addendum} onChange={(e) => setAddendum(e.target.value)} />
-              <button className="btn btn-quiet mt-2" onClick={addAddendum} disabled={!addendum.trim()}>Add addendum</button>
-            </section>
-            <PrivateNote value={form.private_note} onChange={(v) => set({ private_note: v })} onSave={save} dirty={dirty} saving={saving} />
+            {signed && (isAuthor || isSupervisor(me)) && (
+              <section>
+                <h2 className="font-bold">Add an addendum</h2>
+                <p className="text-sm text-muted">Signed notes can't be edited. Add corrections or later information here.</p>
+                <textarea className="field note-text mt-2" rows={4} value={addendum} onChange={(e) => setAddendum(e.target.value)} />
+                <button className="btn btn-quiet mt-2" onClick={addAddendum} disabled={!addendum.trim()}>Add addendum</button>
+              </section>
+            )}
+            {session.note_status === "submitted" && isAuthor && (
+              <p className="rounded-md bg-flag-soft px-3 py-2 text-sm text-flag">Your supervisor will co-sign this note or return it with feedback. It's locked until then.</p>
+            )}
+            {isAuthor && <PrivateNote value={form.private_note} onChange={(v) => set({ private_note: v })} onSave={save} dirty={dirty} saving={saving} />}
           </aside>
         </div>
       ) : (
@@ -311,26 +342,52 @@ export default function SessionNote() {
 
             <div className="mt-8 flex flex-wrap items-center gap-2 border-t border-line pt-4">
               <button className="btn btn-quiet" onClick={save} disabled={saving || !dirty}>{saving ? "Saving…" : dirty ? "Save draft" : "Saved"}</button>
-              <button className="btn btn-primary" onClick={() => setConfirmSign(true)}>Sign note</button>
+              <button className="btn btn-primary" onClick={() => setConfirmSign(true)}>{needsReview ? "Submit for review" : "Sign note"}</button>
               <button className="ml-auto text-sm text-muted hover:text-risk" onClick={remove}>Delete session</button>
             </div>
           </section>
         </div>
       )}
 
-      <Modal open={confirmSign} onClose={() => setConfirmSign(false)} title="Sign this note?">
+      <Modal open={confirmSign} onClose={() => setConfirmSign(false)} title={needsReview ? "Submit for review?" : "Sign this note?"}>
         <p className="max-w-prose">
-          Once signed, the note becomes part of the client's record and can't be edited. You can still add an addendum later.
+          {needsReview
+            ? "Your supervisor will review the note and co-sign it, or send it back with feedback. You can't edit it while it's waiting."
+            : "Once signed, the note becomes part of the client's record and can't be edited. You can still add an addendum later."}
         </p>
         {!form.risk_check.trim() && form.status === "attended" && (
           <p className="mt-3 rounded-md bg-flag-soft px-3 py-2 text-sm text-flag">The risk check is empty. Consider noting it, even if risk was denied.</p>
         )}
         <div className="mt-5 flex gap-2">
-          <button className="btn btn-primary" onClick={sign}>Sign note</button>
+          <button className="btn btn-primary" onClick={sign}>{needsReview ? "Submit for review" : "Sign note"}</button>
           <button className="btn btn-quiet" onClick={() => setConfirmSign(false)}>Keep editing</button>
         </div>
       </Modal>
     </div>
+  );
+}
+
+function ReviewPanel({ sessionId, onDone }: { sessionId: number; onDone: (s: Session) => void }) {
+  const [comment, setComment] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  async function decide(decision: "approve" | "return") {
+    setBusy(true); setError(null);
+    try { onDone(await api.review(sessionId, decision, comment || undefined)); }
+    catch (e) { setError((e as Error).message); } finally { setBusy(false); }
+  }
+  return (
+    <section className="mb-6 rounded-lg bg-paper p-4 ring-2 ring-pine/40">
+      <h2 className="font-bold">Your review</h2>
+      <p className="text-sm text-muted">Co-sign the note, or return it with what needs changing. Check that the risk check is recorded.</p>
+      <textarea className="field mt-2" rows={3} value={comment} onChange={(e) => setComment(e.target.value)}
+        placeholder="Feedback for the counsellor (optional when co-signing)" aria-label="Review feedback" />
+      <ErrorText error={error} />
+      <div className="mt-2 flex flex-wrap gap-2">
+        <button className="btn btn-primary" disabled={busy} onClick={() => decide("approve")}>Co-sign note</button>
+        <button className="btn btn-quiet" disabled={busy || !comment.trim()} onClick={() => decide("return")}>Return with feedback</button>
+      </div>
+    </section>
   );
 }
 
