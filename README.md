@@ -124,7 +124,7 @@ AI is optional. Everything works without it. Set **one** key on Render:
 - the fictional demo organisation (investors can try every AI feature), and
 - funder narratives, which only ever see anonymised, suppressed figures.
 
-Real organisations' client records are never sent. To use AI with real clients, turn on billing for the key in Google AI Studio (paid-tier data isn't used to train Google's models), then set `GEMINI_BILLING_ENABLED=true`. Gemini 3.5 Flash-Lite costs about US$0.30 per million input tokens; an hour of audio is about 115,000 tokens, so roughly US$0.04 to transcribe.
+Real organisations' client records are never sent. To use AI with real clients, turn on billing for the key in Google AI Studio (paid-tier data isn't used to train Google's models), then set `GEMINI_BILLING_ENABLED=true`. Gemini 3.5 Flash-Lite costs about US$0.30 per million input tokens; an hour of audio is about 115,000 input tokens plus the transcript (US$2.50 per million output tokens), so an hour-long session costs roughly US$0.05 to US$0.10 to transcribe.
 
 **What is sent:**
 - Typed notes, briefs and letters go without names or contact details.
